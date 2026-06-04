@@ -11,7 +11,7 @@
 ```
 Scheduler (插件模块)
 ├── USchedulerSubsystem : UWorldSubsystem   [内核——时刻调度中心]
-├── USchedulerTask : UObject                [任务数据单元——占位]
+├── USchedulerTask : UObject                [任务数据单元——关键帧+执行委托]
 ├── ASchedulerTaskPool : AActor             [任务池——占位]
 ├── USchedulerWidget : UWidget              [UI层——总容器，蓝图唯一暴露口]
 │   └── SSchedulerWidget : SCompoundWidget  [Slate——十字分割布局]
@@ -200,13 +200,38 @@ Tick = ViewStartTick + Round(LocalX / EffectiveTickPixel)
 
 ### USchedulerTask —— 任务数据单元
 
-**定位：** 单个调度任务的 UObject 封装。当前为占位类，功能待实现。
+**定位：** 单个调度任务的 UObject 封装。携带关键帧数组与执行委托，通过 ExposeOnSpawn 属性支持蓝图 `Construct Object from Class` 节点直接构造。
 
 | 属性 | 值 |
 |------|-----|
 | 父类 | UObject |
 | 文件 | `Public/SchedulerTask.h` |
-| 状态 | 占位——无成员、无函数 |
+
+**成员变量：**
+
+| 变量 | 类型 | UPROPERTY | 说明 |
+|------|------|------|------|
+| `Keyframes` | `TArray<int64>` | `UPROPERTY()` | 关键帧时间点数组，有序存储 |
+| `TaskName` | `FString` | `EditAnywhere, BlueprintReadWrite, ExposeOnSpawn` | 任务名称，蓝图构造节点可直接赋值 |
+| `TaskOwnerName` | `FString` | `EditAnywhere, BlueprintReadWrite, ExposeOnSpawn` | 任务拥有者名称，蓝图构造节点可直接赋值 |
+
+**委托：**
+
+| 委托 | 类型 | 说明 |
+|------|------|------|
+| `ExecuteTask` | `FExecuteTask` (DynamicMulticast, 3参) | Task 执行分发器，广播时传入当前时刻、方向、ClipIndex |
+
+**FExecuteTask 签名：**
+
+```
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FExecuteTask, int64, NewCurrentTime, bool, bIsForward, int32, ClipIndex)
+```
+
+**函数：**
+
+| 函数 | 访问 | 类别 | 功能 |
+|------|------|------|------|
+| `AddKeyframe(int64, TArray<int64>, int32&, bool&)` | public, BlueprintCallable | Scheduler\|Task | 二分查找插入/更新关键帧，OutIndex 返回位置，bOutIsInsert 标识是否新增 |
 
 ### ASchedulerTaskPool —— 任务池
 
