@@ -99,9 +99,11 @@ ITaskInterface::Execute_ExecuteTask(TaskOwner, NewCurrentTime, bIsForward, ClipI
 
 | 函数 | 访问 | 类别 | 功能 |
 |------|------|------|------|
-| `OnTaskInitialized()` | public | — | 初始化钩子，当前空，预留蓝图覆写 |
-| `OnTimeChange(int64, bool)` | private, UFUNCTION | — | 时刻变更回调：二分查找 → 构造 ClipIndex → ITaskInterface::Execute_ExecuteTask |
-| `AddKeyframe(int64, TArray<int64>, int32&, bool&)` | public, BlueprintCallable | Scheduler\|Task | 二分查找插入/更新 InKeyframes，通过 MoveTemp 同步到 Keyframes |
+| `OnTaskInitialized()` | public | — | 初始化钩子，预留 TaskTrack::Create 调用 |
+| `OnDestory()` | public | — | 销毁钩子，预留 UI 销毁逻辑 |
+| `OnTimeChange(int64, bool)` | public | — | 时刻变更回调：二分查找 → 构造 ClipIndex → ITaskInterface::Execute_ExecuteTask |
+| `AddKeyframe(int64, const TArray<int64>&, int32&, bool&)` | public, BlueprintCallable | Scheduler\|Task | 拷贝 InKeyframes 到成员 Keyframes，二分查找插入/去重，TODO UI 更新 |
+| `DeleteKeyframe(int64, int32&)` | public | — | 按值查找并移除关键帧，返回原始索引，不对蓝图公开 |
 
 **OnTimeChange 流程：**
 
@@ -159,6 +161,7 @@ CurrentTimeMinusMinus()
 | `CurrentTimePlusPlus()` | public, BlueprintCallable | Scheduler\|TimeChange | 前进1时刻 | 触发 OnTimeChanged |
 | `CurrentTimeMinusMinus()` | public, BlueprintCallable | Scheduler\|TimeChange | 后退1时刻，触底钳位0 | 条件触发 OnTimeChanged |
 | `CreateTask(FString, FString, UObject*)` | public, BlueprintCallable | Scheduler\|Task | 工厂创建 Task 并入池 | 绑定 OnTimeChanged |
+| `DeleteTask(USchedulerTask*)` | public, BlueprintCallable | Scheduler\|Task | 从 TaskMap 移除 Task，清理空分组 | 返回 bool，仅移除引用 |
 
 **CreateTask 流程：**
 
@@ -169,6 +172,16 @@ NewObject<USchedulerTask>(TaskOwner)
   → TaskMap.FindOrAdd(TaskOwnerName).Add(NewTask)
   → OnTimeChanged.AddDynamic(NewTask, &USchedulerTask::OnTimeChange)
   → return NewTask
+```
+
+**DeleteTask 流程：**
+
+```
+IsValid(Task) 门禁
+  → TaskMap.Find(TaskOwnerName) 查找分组
+  → OwnerTasks->Remove(Task) 移除
+  → 分组为空则 TaskMap.Remove(TaskOwnerName)
+  → return true（GC 自动回收 Task，委托自动解绑）
 ```
 
 **TaskMap：**

@@ -43,8 +43,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scheduler|TimeChange")
 	void CurrentTimeMinusMinus();
 	
+	//创建Task
 	UFUNCTION(BlueprintCallable, Category = "Scheduler|Task")
 	USchedulerTask* CreateTask(FString TaskName, FString TaskOwnerName, UObject* TaskOwner);
+	
+	//删除Task
+	UFUNCTION(BlueprintCallable, Category = "Scheduler|Task")
+	bool DeleteTask(USchedulerTask* Task);
 	
 private:	
 	// 当前时刻

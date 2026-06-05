@@ -62,3 +62,11 @@ USchedulerTask* USchedulerSubsystem::CreateTask(FString TaskName, FString TaskOw
 
 	return NewTask;
 }
+
+bool USchedulerSubsystem::DeleteTask(USchedulerTask* Task)
+{
+    //TODO Task解绑委托->Task从池中移除->调用Task的OnDestory函数
+    return true;
+}
+
+

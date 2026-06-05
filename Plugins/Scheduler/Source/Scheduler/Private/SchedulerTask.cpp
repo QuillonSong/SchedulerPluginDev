@@ -7,6 +7,12 @@
 
 void USchedulerTask::OnTaskInitialized()
 {
+	//TODO 调用TaskTrack中的Create
+}
+
+void USchedulerTask::OnDestory()
+{
+	//TODO 调用销毁UI
 }
 
 void USchedulerTask::OnTimeChange(int64 InCurrentTime, bool bIsForward)
@@ -62,33 +68,45 @@ void USchedulerTask::OnTimeChange(int64 InCurrentTime, bool bIsForward)
 	ITaskInterface::Execute_ExecuteTask(TaskOwner, InCurrentTime, bIsForward, ClipIndex);
 }
 
-void USchedulerTask::AddKeyframe(int64 NewKeyframe, TArray<int64> InKeyframes, int32& OutIndex, bool& bOutIsInsert)
+void USchedulerTask::AddKeyframe(int64 NewKeyframe, const TArray<int64>& InKeyframes, int32& OutIndex, bool& bOutIsInsert)
 {
+	bOutIsInsert = true;
+
+	// 拷贝组件 Keyframes 到 Task 缓存，就地操作
+	Keyframes = InKeyframes;
+
 	int32 Left = 0;
-	int32 Right = InKeyframes.Num();
+	int32 Right = Keyframes.Num();
 
 	while (Left < Right)
 	{
 		const int32 Mid = Left + (Right - Left) / 2;
 
-		if (InKeyframes[Mid] == NewKeyframe)
+		if (Keyframes[Mid] == NewKeyframe)
 		{
-			InKeyframes[Mid] = NewKeyframe;  // 原地更新
-			OutIndex = Mid; 
+			OutIndex = Mid;
 			bOutIsInsert = false;
-			Keyframes = MoveTemp(InKeyframes);
-			return;
+			break;
 		}
 
-		if (InKeyframes[Mid] < NewKeyframe)
+		if (Keyframes[Mid] < NewKeyframe)
 			Left = Mid + 1;
 		else
 			Right = Mid;
 	}
-	
-	// 未找到 → 插入到正确位置
-	InKeyframes.Insert(NewKeyframe, Left);
-	OutIndex = Left;
-	bOutIsInsert = true;
-	Keyframes = MoveTemp(InKeyframes);
+
+	if (bOutIsInsert)
+	{
+		Keyframes.Insert(NewKeyframe, Left);
+		OutIndex = Left;
+	}
+	// 移除TArray<int64>& OutKeyframes，不在函数中更新OutKeyframes，外部数组由外部维护；
+	// TODO 调用UI更新函数
+}
+
+void USchedulerTask::DeleteKeyframe(int64 InKeyframe, int32& OriginalIndex)
+{
+	int32 Index = Keyframes.Find(InKeyframe);
+	Keyframes.RemoveAt(Index);
+	OriginalIndex = Index;
 }
