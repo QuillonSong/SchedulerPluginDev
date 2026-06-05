@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Subsystems/WorldSubsystem.h"
+#include "SchedulerTask.h"
 #include "SchedulerSubsystem.generated.h"
 
 // 时刻变更委托，bIsForward=true为前进、false为后退
@@ -14,6 +15,10 @@ class SCHEDULER_API USchedulerSubsystem : public UWorldSubsystem
 {
 	GENERATED_BODY()
 public:
+	
+	//Task管理池
+	TMap<FString,TArray<USchedulerTask* >> TaskMap;
+	
 	// 时刻变更事件分发器，任意类型对象均可绑定
 	UPROPERTY(BlueprintAssignable, Category = "Scheduler|TimeChange")
 	FOnTimeChanged OnTimeChanged;
@@ -37,6 +42,9 @@ public:
 	// 后退一时刻
 	UFUNCTION(BlueprintCallable, Category = "Scheduler|TimeChange")
 	void CurrentTimeMinusMinus();
+	
+	UFUNCTION(BlueprintCallable, Category = "Scheduler|Task")
+	USchedulerTask* CreateTask(FString TaskName, FString TaskOwnerName, UObject* TaskOwner);
 	
 private:	
 	// 当前时刻

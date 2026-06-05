@@ -12,3 +12,6 @@ Saved/
 # OS
 Thumbs.db
 .DS_Store
+
+# Agent
+.claude/
