@@ -2,6 +2,7 @@
 
 
 #include "SchedulerSubsystem.h"
+#include "Scheduler.h"
 
 void USchedulerSubsystem::initializationSubsystem()
 {

@@ -4,6 +4,9 @@
 
 #define LOCTEXT_NAMESPACE "FSchedulerModule"
 
+//[INFO]Log声明
+DEFINE_LOG_CATEGORY(LogScheduler);
+
 void FSchedulerModule::StartupModule()
 {
 	// This code will execute after your module is loaded into memory; the exact timing is specified in the .uplugin file per-module
@@ -12,7 +15,7 @@ void FSchedulerModule::StartupModule()
 void FSchedulerModule::ShutdownModule()
 {
 	// This function may be called during shutdown to clean up your module.  For modules that support dynamic reloading,
-	// we call this function before unloading the module.
+	// we call this function before unloading the module. 
 }
 
 #undef LOCTEXT_NAMESPACE

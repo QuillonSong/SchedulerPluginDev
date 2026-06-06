@@ -30,7 +30,7 @@ public:
 	FString TaskName;       // 任务名称
 	FString TaskOwnerName;	// Task拥有者名称
 	UObject* TaskOwner;	    // Task拥有者
-	//TODO 创建UI变量
+	//TODO))创建UI变量
 
 	//初始化Task
 	void OnTaskInitialized();
@@ -39,6 +39,7 @@ public:
 	void OnDestory();
 	
 	//TimeChange变更通知
+	UFUNCTION()
 	void OnTimeChange(int64 InCurrentTime, bool bIsForward);
 	
 	// 添加关键帧
@@ -48,7 +49,7 @@ public:
 	//删除关键帧，不对蓝图公开，由未实现的KeyframeUI调用
 	void DeleteKeyframe(int64 InKeyframe, int32& OriginalIndex);
 	
-	//TODO 销毁UI
+	//TODO))销毁UI
 	
 private:
 	// 防重复初始化

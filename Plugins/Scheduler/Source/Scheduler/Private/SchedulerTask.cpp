@@ -3,20 +3,21 @@
 
 #include "SchedulerTask.h"
 #include "TaskInterface.h"
+#include "Scheduler.h"
 
 
 void USchedulerTask::OnTaskInitialized()
 {
-	//TODO 调用TaskTrack中的Create
+	//TODO))调用TaskTrack中的Create
 }
 
 void USchedulerTask::OnDestory()
 {
-	//TODO 调用销毁UI
+	//TODO))调用销毁UI
 }
 
 void USchedulerTask::OnTimeChange(int64 InCurrentTime, bool bIsForward)
-{
+{	
 	if (Keyframes.Num() == 0)
 	{
 		return;
@@ -100,8 +101,8 @@ void USchedulerTask::AddKeyframe(int64 NewKeyframe, const TArray<int64>& InKeyfr
 		Keyframes.Insert(NewKeyframe, Left);
 		OutIndex = Left;
 	}
-	// 移除TArray<int64>& OutKeyframes，不在函数中更新OutKeyframes，外部数组由外部维护；
-	// TODO 调用UI更新函数
+	// [INFO]移除TArray<int64>& OutKeyframes，不在函数中更新OutKeyframes，外部数组由外部维护；
+	// TODO))调用UI更新函数
 }
 
 void USchedulerTask::DeleteKeyframe(int64 InKeyframe, int32& OriginalIndex)
@@ -110,3 +111,4 @@ void USchedulerTask::DeleteKeyframe(int64 InKeyframe, int32& OriginalIndex)
 	Keyframes.RemoveAt(Index);
 	OriginalIndex = Index;
 }
+
