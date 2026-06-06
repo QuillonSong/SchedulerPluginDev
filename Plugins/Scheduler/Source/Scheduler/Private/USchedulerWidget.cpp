@@ -1,10 +1,12 @@
 #include "USchedulerWidget.h"
 #include "SSchedulerWidget.h"
 #include "SSchedulerRuler.h"
+#include "SSchedulerPlayhead.h"
 #include "SchedulerSubsystem.h"
 #include "SchedulerRulerTypes.h"
 #include "Widgets/Layout/SScrollBox.h"
 #include "Widgets/SBoxPanel.h"
+#include "Widgets/SOverlay.h"
 
 #define LOCTEXT_NAMESPACE "UMG"
 
@@ -15,7 +17,6 @@ const FText USchedulerWidget::GetPaletteCategory()
 
 TSharedRef<SWidget> USchedulerWidget::RebuildWidget()
 {
-	// 构造刻度尺 Slate 控件，属性取自本类 UPROPERTY
 	MyRulerSlate = SNew(SSchedulerRuler)
 		.Style(RulerStyle)
 		.MajorLength(RulerMajorLength)
@@ -28,7 +29,6 @@ TSharedRef<SWidget> USchedulerWidget::RebuildWidget()
 		.OnDragged(FOnSSchedulerRulerDragged::CreateUObject(this, &USchedulerWidget::HandleRulerDragged))
 		.OnScrolled(FOnSSchedulerRulerScrolled::CreateUObject(this, &USchedulerWidget::HandleRulerScrolled));
 
-	// 提取左上角用户自定义控件——根据Customize类动态创建实例，未设置时传空
 	TSharedPtr<SWidget> HeadLeftContent;
 	if (Customize)
 	{
@@ -42,16 +42,12 @@ TSharedRef<SWidget> USchedulerWidget::RebuildWidget()
 		}
 	}
 
-	// ── 构建 BodyLeft 滚动容器 ──
-
 	SAssignNew(TitleRowsBox, SVerticalBox);
 	SAssignNew(TitleScrollBox, SScrollBox)
 		.Orientation(Orient_Vertical)
 		.ScrollBarVisibility(EVisibility::Collapsed)
 		.OnUserScrolled(FOnUserScrolled::CreateLambda([this](float Offset) { HandleTitleScrolled(Offset); }));
 	TitleScrollBox->AddSlot()[TitleRowsBox.ToSharedRef()];
-
-	// ── 构建 BodyRight 滚动容器 ──
 
 	SAssignNew(BodyRowsBox, SVerticalBox);
 	SAssignNew(BodyScrollBox, SScrollBox)
@@ -60,8 +56,7 @@ TSharedRef<SWidget> USchedulerWidget::RebuildWidget()
 		.OnUserScrolled(FOnUserScrolled::CreateLambda([this](float Offset) { HandleBodyScrolled(Offset); }));
 	BodyScrollBox->AddSlot()[BodyRowsBox.ToSharedRef()];
 
-	// ── 注入 Subsystem → 补齐已有 TrackMap → 后续 CreateTask/DeleteTask 增量 ──
-
+	// 注入 Subsystem
 	if (UWorld* World = GetWorld())
 	{
 		if (USchedulerSubsystem* Sub = World->GetSubsystem<USchedulerSubsystem>())
@@ -74,8 +69,6 @@ TSharedRef<SWidget> USchedulerWidget::RebuildWidget()
 		}
 	}
 
-	// ── 组装总布局 ──
-
 	MySlateWidget = SNew(SSchedulerWidget)
 		.HeadHeight(HeadHeight)
 		.LeftSidebarWidth(LeftSidebarWidth)
@@ -85,35 +78,56 @@ TSharedRef<SWidget> USchedulerWidget::RebuildWidget()
 		.BodyLeft(TitleScrollBox)
 		.BodyRight(BodyScrollBox);
 
-	return MySlateWidget.ToSharedRef();
+	SAssignNew(PlayheadWidget, SSchedulerPlayhead)
+		.PlayheadWidth(PlayheadWidth)
+		.PlayheadColor(PlayheadColor)
+		.FontSize(PlayheadFontSize)
+		.FontColor(PlayheadFontColor);
+
+	// 绑定 OnTimeChanged → Playhead + 初始位置
+	if (UWorld* World = GetWorld())
+	{
+		if (USchedulerSubsystem* Sub = World->GetSubsystem<USchedulerSubsystem>())
+		{
+			Sub->OnTimeChanged.AddDynamic(this, &USchedulerWidget::UpdatePlayhead);
+			UpdatePlayhead(Sub->GetCurrentTime(), true);
+		}
+	}
+
+	return SNew(SOverlay)
+		+ SOverlay::Slot()[MySlateWidget.ToSharedRef()]
+		+ SOverlay::Slot()[PlayheadWidget.ToSharedRef()];
 }
 
 void USchedulerWidget::ReleaseSlateResources(bool bReleaseChildren)
 {
+	if (UWorld* World = GetWorld())
+	{
+		if (USchedulerSubsystem* Sub = World->GetSubsystem<USchedulerSubsystem>())
+		{
+			Sub->OnTimeChanged.RemoveDynamic(this, &USchedulerWidget::UpdatePlayhead);
+		}
+	}
 	Super::ReleaseSlateResources(bReleaseChildren);
 	MySlateWidget.Reset();
 	MyRulerSlate.Reset();
+	PlayheadWidget.Reset();
 	TitleScrollBox.Reset();
 	TitleRowsBox.Reset();
 	BodyScrollBox.Reset();
 	BodyRowsBox.Reset();
-	if (bReleaseChildren)
-	{
-		CustomizeInstance = nullptr;
-	}
+	if (bReleaseChildren) CustomizeInstance = nullptr;
 }
 
 void USchedulerWidget::SynchronizeProperties()
 {
 	Super::SynchronizeProperties();
-
 	if (MySlateWidget.IsValid())
 	{
 		MySlateWidget->SetHeadHeight(HeadHeight);
 		MySlateWidget->SetLeftSidebarWidth(LeftSidebarWidth);
 		MySlateWidget->SetDrawCross(bIsDrawCross);
 	}
-
 	if (MyRulerSlate.IsValid())
 	{
 		MyRulerSlate->SetStyle(RulerStyle);
@@ -139,21 +153,30 @@ void USchedulerWidget::HandleRulerClicked(int64 Tick)
 
 void USchedulerWidget::HandleRulerDragged(int64 DeltaTick)
 {
+	if (UWorld* World = GetWorld())
+	{
+		if (USchedulerSubsystem* Sub = World->GetSubsystem<USchedulerSubsystem>())
+		{
+			UpdatePlayhead(Sub->GetCurrentTime(), true);
+		}
+	}
 	RefreshKeyframePositions();
 	RefreshUI.Broadcast();
 }
 
 void USchedulerWidget::HandleRulerScrolled(int32 ScrollDelta)
 {
-	if (MyRulerSlate.IsValid())
+	// Ruler 已在 OnMouseWheel 中自更新 ZoomTickLevel，此处不重复调用
+	if (UWorld* World = GetWorld())
 	{
-		MyRulerSlate->ZoomTickLevel(ScrollDelta);
+		if (USchedulerSubsystem* Sub = World->GetSubsystem<USchedulerSubsystem>())
+		{
+			UpdatePlayhead(Sub->GetCurrentTime(), true);
+		}
 	}
 	RefreshKeyframePositions();
 	RefreshUI.Broadcast();
 }
-
-// ── 滚动同步 ──
 
 void USchedulerWidget::HandleTitleScrolled(float Offset)
 {
@@ -169,6 +192,26 @@ void USchedulerWidget::HandleBodyScrolled(float Offset)
 	bIsScrollSyncing = true;
 	if (TitleScrollBox.IsValid()) TitleScrollBox->SetScrollOffset(Offset);
 	bIsScrollSyncing = false;
+}
+
+void USchedulerWidget::UpdatePlayhead(int64 NewCurrentTime, bool bIsForward)
+{
+	if (!PlayheadWidget.IsValid() || !MyRulerSlate.IsValid()) return;
+
+	const TArray<FTickLevel>* Levels = MyRulerSlate->GetTickLevelArray();
+	const int32 Lvl = FMath::Clamp(MyRulerSlate->GetActiveLevelIndex(), 0, Levels->Num() - 1);
+	const int64 MinorTicks = Levels->Num() > 0 ? (*Levels)[Lvl].Minor : 1;
+	const float EffectiveTickPixel = MyRulerSlate->GetMinorPixel() / static_cast<float>(MinorTicks);
+
+	const float CachedW = MySlateWidget.IsValid() ? MySlateWidget->GetCachedGeometry().GetLocalSize().X : 0.f;
+	const float RightW = CachedW > 0.f ? CachedW - LeftSidebarWidth : 10000.f;
+
+	PlayheadWidget->UpdateState(
+		NewCurrentTime,
+		MyRulerSlate->GetViewStartTick(),
+		EffectiveTickPixel,
+		LeftSidebarWidth,
+		RightW);
 }
 
 void USchedulerWidget::RefreshKeyframePositions()

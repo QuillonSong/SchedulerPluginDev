@@ -8,6 +8,7 @@
 
 class SSchedulerWidget;
 class SSchedulerRuler;
+class SSchedulerPlayhead;
 class SScrollBox;
 class SVerticalBox;
 
@@ -111,6 +112,20 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scheduler|Keyframe")
 	TObjectPtr<UTexture2D> KeyframeTexture;
 
+	// ── Playhead ──
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scheduler|Playhead")
+	float PlayheadWidth = 2.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scheduler|Playhead")
+	FLinearColor PlayheadColor = FLinearColor(1.f, 0.f, 0.f, 1.f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scheduler|Playhead")
+	int32 PlayheadFontSize = 8;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scheduler|Playhead")
+	FLinearColor PlayheadFontColor = FLinearColor(1.f, 0.f, 0.f, 1.f);
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scheduler|Track")
 	int32 TrackFontSize = 10;
 
@@ -132,6 +147,7 @@ protected:
 private:
 	TSharedPtr<SSchedulerWidget> MySlateWidget;
 	TSharedPtr<SSchedulerRuler> MyRulerSlate;
+	TSharedPtr<SSchedulerPlayhead> PlayheadWidget;
 
 	// ── Track 滚动容器 ──
 
@@ -161,6 +177,10 @@ private:
 	void HandleTitleScrolled(float Offset);
 	/** 垂直滚动同步——Body 侧用户滚动时同步 Title 侧 */
 	void HandleBodyScrolled(float Offset);
+
+	/** 更新 Playhead 位置——OnTimeChanged / Ruler 滚动时调用 */
+	UFUNCTION()
+	void UpdatePlayhead(int64 NewCurrentTime, bool bIsForward);
 
 	/** Phase 3：刷新所有 Keyframe 位置——Ruler 拖拽/缩放时自动调用 */
 	void RefreshKeyframePositions();
