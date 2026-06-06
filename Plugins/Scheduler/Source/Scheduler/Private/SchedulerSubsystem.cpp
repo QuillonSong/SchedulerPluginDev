@@ -171,10 +171,8 @@ void USchedulerSubsystem::InitializeTrackContainers(
 
 void USchedulerSubsystem::CreateOwnerTrackWidgets(const FString& OwnerName, FTrack& OutTrack)
 {
-	const FString DisplayName = FString::Printf(TEXT("▼ %s"), *OwnerName);  // 初始展开
-
 	TSharedRef<SSchedulerTrackTitle> Title = SNew(SSchedulerTrackTitle)
-		.DisplayName(DisplayName)
+		.DisplayName(OwnerName)
 		.RowHeight(TrackHeight)
 		.RowColor(OwnerTrackColor)
 		.TextColor(TrackTextColor)
@@ -195,10 +193,21 @@ void USchedulerSubsystem::CreateOwnerTrackWidgets(const FString& OwnerName, FTra
 				if (Entry.Title.IsValid()) Entry.Title->SetVisibility(Vis);
 				if (Entry.Body.IsValid())  Entry.Body->SetVisibility(Vis);
 			}
-			// 切换箭头
-			const FString NewText = FString::Printf(TEXT("%s %s"),
-				Track->bIsCollapsed ? TEXT("▶") : TEXT("▼"), *OwnerName);
-			if (Track->Title.IsValid()) Track->Title->SetDisplayName(NewText);
+			// 切换箭头旋转
+			if (Track->Title.IsValid()) Track->Title->SetExpanded(!Track->bIsCollapsed);
+			return FReply::Handled();
+		}))
+		.OnDeleteClicked(FOnClicked::CreateLambda([this, OwnerName]()
+		{
+			// 删除该 Owner 下所有 Task → 连带删除 OwnerTrack
+			if (TArray<USchedulerTask*>* Tasks = TaskMap.Find(OwnerName))
+			{
+				TArray<USchedulerTask*> ToDelete = *Tasks;  // 拷贝，避免迭代中修改
+				for (USchedulerTask* T : ToDelete)
+				{
+					DeleteTask(T);
+				}
+			}
 			return FReply::Handled();
 		}));
 
@@ -210,6 +219,9 @@ void USchedulerSubsystem::CreateOwnerTrackWidgets(const FString& OwnerName, FTra
 
 	TitleRowsBox->AddSlot().AutoHeight()[Title];
 	BodyRowsBox->AddSlot().AutoHeight()[Body];
+
+	// 初始展开态——箭头旋转 90°
+	Title->SetExpanded(true);
 
 	OutTrack.Title = Title;
 	OutTrack.Body = Body;
@@ -260,7 +272,12 @@ void USchedulerSubsystem::CreateTaskTrackWidgets(FTrack& OwnerTrack, USchedulerT
 		.BorderMargin(TrackTitleMargin)
 		.FontSize(TrackFontSize)
 		.bIsChild(true)
-		.IndentWidth(20.f);
+		.IndentWidth(20.f)
+		.OnDeleteClicked(FOnClicked::CreateLambda([this, Task]()
+		{
+			DeleteTask(Task);
+			return FReply::Handled();
+		}));
 
 	TSharedRef<SSchedulerTrackBody> Body = SNew(SSchedulerTrackBody)
 		.RowHeight(TrackHeight)

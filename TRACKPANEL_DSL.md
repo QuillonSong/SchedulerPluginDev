@@ -39,10 +39,17 @@ Scheduler (插件模块)
 
 | 文件 | 说明 |
 |------|------|
-| `Public/SSchedulerTrackTitle.h` + `.cpp` | BodyLeft 区单行标题 Widget |
+| `Public/SSchedulerTrackTitle.h` + `.cpp` | BodyLeft 区单行标题 Widget（箭头+文字+删除） |
 | `Public/SSchedulerTrackBody.h` + `.cpp` | BodyRight 区单行体 Widget |
 | `Public/SchedulerSubsystem.h` + `.cpp` | FTrack / FTaskTrackEntry + TrackMap + 增量管理 |
 | `Public/USchedulerWidget.h` + `.cpp` | 蓝图属性 + ScrollBox 容器 + 滚动同步 |
+
+### 依赖资产
+
+| 资产 | 用途 |
+|------|------|
+| `Content/T_UI_Arrow.uasset` | 折叠箭头图标（►，展开时 SetRenderTransform 旋转 90°→▼） |
+| `Content/T_UI_Close.uasset` | 删除按钮图标（✖） |
 
 ---
 
@@ -51,12 +58,15 @@ Scheduler (插件模块)
 ### SSchedulerTrackTitle
 
 ```
-SButton("NoBorder", ContentPadding=0)
+SButton("NoBorder", ContentPadding=0, OnClicked=折叠展开)
   └─ SBox(HeightOverride=RowHeight)
        └─ SOverlay
-            ├─ SImage(描边色, DrawAs=Border, Margin=TitleMargin)
+            ├─ SImage(描边, DrawAs=Border, Margin=TitleMargin)
             ├─ SImage(底色, FSlateColorBrush(White), Padding=TitleMargin)
-            └─ STextBlock(ColorAndOpacity=TextColor)
+            ├─ SImage(箭头►, T_UI_Arrow, 仅OwnerTrack, 展开时旋转90°)
+            ├─ STextBlock(OwnerName/TaskName, ColorAndOpacity=TextColor)
+            └─ SButton("NoBorder", OnClicked=删除)
+                 └─ SImage(✖, T_UI_Close)
 ```
 
 ### SSchedulerTrackBody
@@ -140,7 +150,13 @@ DeleteTask(Task)
 点击 OwnerTrack Title（SButton::OnClicked）
   ├─ bIsCollapsed = !bIsCollapsed
   ├─ 遍历 TaskTracks → SetVisibility(Collapsed / Visible)
-  └─ Title->SetDisplayName("▶" / "▼" + OwnerName)
+  └─ Title->SetExpanded(!bIsCollapsed)
+       └─ 折叠: FSlateRenderTransform()       → ► 0°
+          展开: FSlateRenderTransform(Quat2D(90°)) → ▼
+
+点击 ✖ 按钮（OnDeleteClicked）
+  ├─ OwnerTrack ✖ → 删除该 Owner 下所有 Task → OwnerTrack 移除
+  └─ TaskTrack  ✖ → DeleteTask(Task) → 分组清空则 OwnerTrack 移除
 ```
 
 ---

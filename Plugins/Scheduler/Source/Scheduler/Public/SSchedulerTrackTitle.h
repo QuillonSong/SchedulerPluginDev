@@ -22,13 +22,18 @@ public:
 		SLATE_ARGUMENT(bool, bIsChild)
 		SLATE_ARGUMENT(float, IndentWidth)
 		SLATE_EVENT(FOnClicked, OnTrackClicked)
+		SLATE_EVENT(FOnClicked, OnDeleteClicked)
 	SLATE_END_ARGS()
 
 	void Construct(const FArguments& InArgs);
 
-	/** 更新显示文字（折叠箭头切换时调用） */
+	/** 更新显示文字 */
 	void SetDisplayName(const FString& InName);
+
+	/** 设置展开/折叠态——箭头旋转 0°(折叠) / 90°(展开) */
+	void SetExpanded(bool bExpanded);
 
 private:
 	TSharedPtr<STextBlock> TextBlock;
+	TSharedPtr<SImage> ArrowImage;
 };
