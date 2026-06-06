@@ -1,99 +1,98 @@
 # Scheduler Plugin v1.0
 
-UE5 时间轴调度插件——抽象 Tick 时间单位，Task 关键帧驱动，可视化 Track 编辑。
+**赋予任意 UObject 时间调度能力**——无需继承特定基类，实现 `ITaskInterface` 即可让任何对象拥有时间轴驱动的 Task。
 
-## 架构
+## 核心概念
+
+### Task 是抽象能力，不是组件
 
 ```
-USchedulerSubsystem (WorldSubsystem)     ← 内核：Tick 时刻 + Task 池 + Track 池
-USchedulerTask (UObject)                  ← 数据：关键帧数组 + 时刻回调
-USchedulerWidget (UWidget)                ← UI 总容器（蓝图暴露口）
-  ├─ SSchedulerWidget (Slate)             ← 十字四分割布局
-  ├─ SSchedulerRuler (Slate)              ← 水平刻度尺（滚动/缩放/点击）
-  ├─ SSchedulerTrackTitle (Slate)         ← Track 行标题（箭头/文字/删除）
-  ├─ SSchedulerTrackBody (Slate)          ← Track 行体（Keyframe 渲染）
-  └─ SSchedulerPlayhead (Slate)           ← 游标线（CurrentTime 指示）
+任何 UObject 子类 + 实现 ITaskInterface = 拥有 Task 调度能力
 ```
+
+不依赖 Actor、不依赖 Component、不依赖 Tick。Task 通过 `NewObject<USchedulerTask>(Owner)` 创建，Outer 即 Owner，GC 生命周期自动跟随。
+
+### Tick = 纯粹的时间计量单位
+
+不绑定帧、不绑定秒，只是整数刻度。`SetCurrentTime(100)` 代表时刻 100——与帧率无关，与秒无关。由你定义 Tick 的物理意义。
+
+### 关键帧驱动
+
+```
+时刻线:  0───5───10──────20────30
+         ●         ●            ●
+      Keyframe   Keyframe    Keyframe
+```
+
+Task 持有有序关键帧数组。时间推进到关键帧时，**二分查找定位区间**，通过 `ITaskInterface::ExecuteTask(Time, Direction, ClipIndex)` 通知 Owner。Owner 决定"在这一帧做什么"。
 
 ## 功能
 
+### Task 生命周期
+
+| 操作 | 说明 |
+|------|------|
+| `CreateTask(Name, OwnerName, Owner)` | 创建 Task，Owner 自动获得调度能力 |
+| `DestroyTask(Task)` | 销毁 Task + GC 标记，接口通知 Owner |
+| `AddKeyframe(Tick, Array, Index, Inserted)` | 二分插入关键帧，去重 |
+| `RemoveKeyframe(Tick, Index)` | 移除关键帧，接口通知 Owner |
+
+### Track 可视化
+
 | 功能 | 说明 |
 |------|------|
-| Tick 时刻控制 | SetCurrentTime / CurrentTime++ / CurrentTime-- |
-| Task 生命周期 | CreateTask → OnTaskInitialized / DestroyTask → OnDestroy |
-| Keyframe 编辑 | AddKeyframe / RemoveKeyframe，Ruler 对齐渲染 |
-| Keyframe 交互 | 左键选中（CheckedColor）/ 右键删除 |
-| OwnerTrack 折叠 | ▼/► 箭头切换，TaskTrack 折叠/展开 |
-| 增量 Track 管理 | TrackMap 池，CreateTask/DestroyTask 同步增删 |
-| Playhead 游标 | 竖线 + 时间标签，OnTimeChanged 驱动，可见范围自适应 |
-| 蓝图配置 | 全部视觉参数 UPROPERTY 暴露 |
+| OwnerTrack | 按 OwnerName 分组，▼/► 折叠展开子 Task |
+| TaskTrack | 缩进显示，Keyframe 圆点与刻度轴对齐 |
+| Keyframe 交互 | 左键选中（蓝色高亮）/ 右键删除 |
+| Playhead | 红色竖线 + 时间标签，跟随 CurrentTime |
+| 增量同步 | CreateTask/DestroyTask 即时增删 Track，不重建 |
 
-## 蓝图接口
+### 蓝图配置
 
-### USchedulerSubsystem
+所有视觉参数通过 `USchedulerWidget` 蓝图编辑：Track 颜色/字号/边框、Keyframe 尺寸/颜色/贴图、Playhead 宽度/颜色。
 
-| 函数 | 说明 |
-|------|------|
-| `CreateTask(Name, OwnerName, Owner)` | 创建 Task |
-| `DestroyTask(Task)` | 销毁 Task |
-| `SetCurrentTime(Tick)` | 跳转时刻 |
-| `GetCurrentTime()` | 获取时刻 |
-| `initializationSubsystem()` | 归零 |
+## ITaskInterface（3 个蓝图事件）
 
-### ITaskInterface（TaskOwner 实现）
+```cpp
+UFUNCTION(BlueprintNativeEvent)
+void ExecuteTask(int64 NewCurrentTime, bool bIsForward, FClipIndex ClipIndex);
 
-| 函数 | 说明 |
-|------|------|
-| `ExecuteTask(Time, Forward, ClipIndex)` | 时刻变更通知 |
-| `DestroyTask()` | Task 销毁通知 |
-| `RemoveKeyframe(Index)` | Keyframe 移除通知 |
+UFUNCTION(BlueprintNativeEvent)
+void DestroyTask();
 
-### USchedulerWidget 属性
+UFUNCTION(BlueprintNativeEvent)
+void RemoveKeyframe(int32 KeyframeIndex);
+```
 
-#### Layout
-| 属性 | 默认值 |
-|------|--------|
-| HeadHeight | 100 |
-| LeftSidebarWidth | 200 |
-| bIsDrawCross | true |
+**任何一个 Blueprint 实现这 3 个函数，就能被 CreateTask 赋予调度能力。**
 
-#### Track
-| 属性 | 默认值 |
-|------|--------|
-| TrackHeight | 24 |
-| OwnerTrackColor | (0.08, 0.08, 0.08) |
-| TaskTrackColor | (0.12, 0.12, 0.12) |
-| TrackTextColor | (0.9, 0.9, 0.9) |
-| TrackBorderColor | (0.2, 0.2, 0.2) |
-| TrackTitleMargin | (1,1,1,1) |
-| TrackBodyMargin | (1,1,0,1) |
-| TrackFontSize | 10 |
+## 解耦设计
 
-#### Keyframe
-| 属性 | 默认值 |
-|------|--------|
-| KeyframeSize | 10 |
-| UnCheckedColor | White |
-| CheckedColor | Blue |
-| KeyframeTexture | nullptr |
+```
+USchedulerTask（数据）          ←→  USchedulerSubsystem（调度器）
+       │                                    │
+       ▼                                    ▼
+ITaskInterface（能力）             TrackMap（UI 池）
+       │                                    │
+       ▼                                    ▼
+  任意 UObject                       SSchedulerTrack*
+  (蓝图实现接口)                    (Slate 控件)
+```
 
-#### Playhead
-| 属性 | 默认值 |
-|------|--------|
-| PlayheadWidth | 2 |
-| PlayheadColor | Red |
-| PlayheadFontSize | 8 |
-| PlayheadFontColor | Red |
+- Subsystem 只管时刻 + 池管理，不碰 UI 布局
+- Task 只管关键帧数据 + 二分查找，不知道谁在显示它
+- Widget 只管 Slate 渲染，所有属性 UPROPERTY 暴露
+- **三者互相不知道对方存在**
 
-## 文件
+## 快速开始
 
-| 文件 | 说明 |
-|------|------|
-| `TRACKPANEL_DSL.md` | 架构 DSL（完整设计文档） |
-| `SCHEDULER_DSL.md` | 内核 DSL（Subsystem/Task 接口） |
+1. 创建 Widget 蓝图，放入 `USchedulerWidget`
+2. 创建任意 Actor/Obj 蓝图，实现 `ITaskInterface`
+3. 蓝图调用 `Subsystem->CreateTask("MyTask", "OwnerA", Self)` ——该对象立即拥有 Task 调度能力
+4. 添加 Keyframe，观察 Track 面板上的圆点标记
+5. `SetCurrentTime(100)` 驱动时刻前进，Owner 收到 `ExecuteTask` 回调
 
-## 已知问题
+## 文档
 
-- `[FIXME]` Keyframe 属性(Size/Color/Texture)修改后渲染不更新
-- 聚合功能未实现
-- 自定义画刷形(Circle/Triangle)未实现
+- [TRACKPANEL_DSL.md](TRACKPANEL_DSL.md) — Track 面板架构设计
+- [SCHEDULER_DSL.md](SCHEDULER_DSL.md) — 内核接口与委托链
