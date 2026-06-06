@@ -2,6 +2,8 @@
 #include "SSchedulerWidget.h"
 #include "SSchedulerRuler.h"
 #include "SchedulerSubsystem.h"
+#include "Widgets/Layout/SScrollBox.h"
+#include "Widgets/SBoxPanel.h"
 
 #define LOCTEXT_NAMESPACE "UMG"
 
@@ -29,7 +31,6 @@ TSharedRef<SWidget> USchedulerWidget::RebuildWidget()
 	TSharedPtr<SWidget> HeadLeftContent;
 	if (Customize)
 	{
-		// 若类变更或实例不存在则重新创建
 		if (!CustomizeInstance || CustomizeInstance->GetClass() != Customize)
 		{
 			CustomizeInstance = CreateWidget<UUserWidget>(this, Customize);
@@ -40,12 +41,48 @@ TSharedRef<SWidget> USchedulerWidget::RebuildWidget()
 		}
 	}
 
+	// ── 构建 BodyLeft 滚动容器 ──
+
+	SAssignNew(TitleRowsBox, SVerticalBox);
+	SAssignNew(TitleScrollBox, SScrollBox)
+		.Orientation(Orient_Vertical)
+		.ScrollBarVisibility(EVisibility::Collapsed)
+		.OnUserScrolled(FOnUserScrolled::CreateLambda([this](float Offset) { HandleTitleScrolled(Offset); }));
+	TitleScrollBox->AddSlot()[TitleRowsBox.ToSharedRef()];
+
+	// ── 构建 BodyRight 滚动容器 ──
+
+	SAssignNew(BodyRowsBox, SVerticalBox);
+	SAssignNew(BodyScrollBox, SScrollBox)
+		.Orientation(Orient_Vertical)
+		.ScrollBarVisibility(EVisibility::Collapsed)
+		.OnUserScrolled(FOnUserScrolled::CreateLambda([this](float Offset) { HandleBodyScrolled(Offset); }));
+	BodyScrollBox->AddSlot()[BodyRowsBox.ToSharedRef()];
+
+	// ── 注入 Subsystem → 补齐已有 TrackMap → 后续 CreateTask/DeleteTask 增量 ──
+
+	if (UWorld* World = GetWorld())
+	{
+		if (USchedulerSubsystem* Sub = World->GetSubsystem<USchedulerSubsystem>())
+		{
+			Sub->InitializeTrackContainers(
+				TitleScrollBox, TitleRowsBox, BodyScrollBox, BodyRowsBox,
+				TrackHeight, OwnerTrackColor, TaskTrackColor,
+				TrackTextColor, TrackBorderColor,
+				TrackTitleMargin, TrackBodyMargin, TrackFontSize);
+		}
+	}
+
+	// ── 组装总布局 ──
+
 	MySlateWidget = SNew(SSchedulerWidget)
 		.HeadHeight(HeadHeight)
 		.LeftSidebarWidth(LeftSidebarWidth)
 		.bIsDrawCross(bIsDrawCross)
 		.HeadLeft(HeadLeftContent)
-		.HeadRight(MyRulerSlate);
+		.HeadRight(MyRulerSlate)
+		.BodyLeft(TitleScrollBox)
+		.BodyRight(BodyScrollBox);
 
 	return MySlateWidget.ToSharedRef();
 }
@@ -55,6 +92,10 @@ void USchedulerWidget::ReleaseSlateResources(bool bReleaseChildren)
 	Super::ReleaseSlateResources(bReleaseChildren);
 	MySlateWidget.Reset();
 	MyRulerSlate.Reset();
+	TitleScrollBox.Reset();
+	TitleRowsBox.Reset();
+	BodyScrollBox.Reset();
+	BodyRowsBox.Reset();
 	if (bReleaseChildren)
 	{
 		CustomizeInstance = nullptr;
@@ -106,8 +147,25 @@ void USchedulerWidget::HandleRulerScrolled(int32 ScrollDelta)
 	{
 		MyRulerSlate->ZoomTickLevel(ScrollDelta);
 	}
-
 	RefreshUI.Broadcast();
+}
+
+// ── 滚动同步 ──
+
+void USchedulerWidget::HandleTitleScrolled(float Offset)
+{
+	if (bIsScrollSyncing) return;
+	bIsScrollSyncing = true;
+	if (BodyScrollBox.IsValid()) BodyScrollBox->SetScrollOffset(Offset);
+	bIsScrollSyncing = false;
+}
+
+void USchedulerWidget::HandleBodyScrolled(float Offset)
+{
+	if (bIsScrollSyncing) return;
+	bIsScrollSyncing = true;
+	if (TitleScrollBox.IsValid()) TitleScrollBox->SetScrollOffset(Offset);
+	bIsScrollSyncing = false;
 }
 
 #undef LOCTEXT_NAMESPACE

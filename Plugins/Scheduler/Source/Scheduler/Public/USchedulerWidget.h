@@ -8,6 +8,8 @@
 
 class SSchedulerWidget;
 class SSchedulerRuler;
+class SScrollBox;
+class SVerticalBox;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnRefreshUI);
 
@@ -68,6 +70,32 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scheduler|Slot")
 	TSubclassOf<UUserWidget> Customize;
 
+	// ── Track ──
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scheduler|Track")
+	float TrackHeight = 24.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scheduler|Track")
+	FLinearColor OwnerTrackColor = FLinearColor(0.08f, 0.08f, 0.08f, 1.f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scheduler|Track")
+	FLinearColor TaskTrackColor = FLinearColor(0.12f, 0.12f, 0.12f, 1.f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scheduler|Track")
+	FLinearColor TrackTextColor = FLinearColor(0.9f, 0.9f, 0.9f, 1.f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scheduler|Track")
+	FLinearColor TrackBorderColor = FLinearColor(0.2f, 0.2f, 0.2f, 1.f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scheduler|Track")
+	FMargin TrackTitleMargin = FMargin(1.f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scheduler|Track")
+	FMargin TrackBodyMargin = FMargin(1.f, 1.f, 0.f, 1.f);  // Body 右=0，其余=1
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scheduler|Track")
+	int32 TrackFontSize = 10;
+
 	// ── UI 刷新 ──
 
 	// 统一下发 UI 刷新信号——子控件绑定此委托以同步状态
@@ -87,11 +115,35 @@ private:
 	TSharedPtr<SSchedulerWidget> MySlateWidget;
 	TSharedPtr<SSchedulerRuler> MyRulerSlate;
 
+	// ── Track 滚动容器 ──
+
+	/** BodyLeft 区垂直滚动框 */
+	TSharedPtr<SScrollBox> TitleScrollBox;
+	/** BodyLeft 区行容器 */
+	TSharedPtr<SVerticalBox> TitleRowsBox;
+
+	/** BodyRight 区垂直滚动框 */
+	TSharedPtr<SScrollBox> BodyScrollBox;
+	/** BodyRight 区行容器 */
+	TSharedPtr<SVerticalBox> BodyRowsBox;
+
 	// 运行时创建的HeadLeft控件实例——由Customize类动态生成，持有引用防GC回收
 	UPROPERTY()
 	TObjectPtr<UUserWidget> CustomizeInstance;
 
+	// ── Handler ──
+
 	void HandleRulerClicked(int64 Tick);
 	void HandleRulerDragged(int64 DeltaTick);
 	void HandleRulerScrolled(int32 ScrollDelta);
+
+	// ── 滚动同步 ──
+
+	/** 垂直滚动同步——Title 侧用户滚动时同步 Body 侧 */
+	void HandleTitleScrolled(float Offset);
+	/** 垂直滚动同步——Body 侧用户滚动时同步 Title 侧 */
+	void HandleBodyScrolled(float Offset);
+
+	/** 乒乓防抖门禁 */
+	bool bIsScrollSyncing = false;
 };
