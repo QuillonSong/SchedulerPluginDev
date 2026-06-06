@@ -1,8 +1,8 @@
 # TrackPanel · 架构DSL
 
-> 更新：2026-06-06
-> 用途：Track 面板模块的架构设计与实现文档
-> 当前阶段：Phase 1+2+3 已完成（Owner/TaskTrack + 折叠展开 + Keyframe渲染交互）
+> 更新：2026-06-07
+> 用途：Scheduler 插件架构设计与实现文档
+> 版本：v1.0（Owner/TaskTrack + Keyframe + Playhead 全部完成）
 
 ---
 
@@ -252,6 +252,32 @@ DestroyTask → DestroyTaskTrackWidgets → OwnerTasks.Remove
       ├─ ITaskInterface::Execute_DestroyTask(TaskOwner)
       └─ MarkAsGarbage()
   → 分组清空 → DestroyOwnerTrackWidgets → TrackMap.Remove
+```
+
+---
+
+## Playhead
+
+### SSchedulerPlayhead
+
+SOverlay 覆盖整个 USchedulerWidget 的独立控件。OnPaint 直接绘制竖线 + 时间标签。
+
+| 属性 | 类型 | 默认值 | 说明 |
+|------|------|------|------|
+| `PlayheadWidth` | float | 2 | 竖线宽度 |
+| `PlayheadColor` | FLinearColor | Red | 竖线颜色 |
+| `PlayheadFontSize` | int32 | 8 | 时间标签字号 |
+| `PlayheadFontColor` | FLinearColor | Red | 时间标签颜色 |
+
+### 更新链路
+
+```
+OnTimeChanged.AddDynamic → UpdatePlayhead(Time, Dir)
+Ruler 滚动/缩放 → UpdatePlayhead(Sub->GetCurrentTime(), true)
+
+X = LeftSidebarWidth + (CurrentTime - ViewStartTick) * EffectiveTickPixel
+超出可见范围 → Collapsed 隐藏
+HitTestInvisible → 不拦截鼠标事件
 ```
 
 ---
