@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/Widget.h"
+#include "Blueprint/UserWidget.h"
 #include "SchedulerRulerTypes.h"
 #include "USchedulerWidget.generated.h"
 
@@ -61,6 +62,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scheduler|Ruler")
 	int64 RulerMaxTickValue = 0;
 
+	// ── Slot ──
+
+	// 自定义HeadLeft区控件类——用户选取UUserWidget子类，运行时动态创建实例填入左上Slot
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scheduler|Slot")
+	TSubclassOf<UUserWidget> Customize;
+
 	// ── UI 刷新 ──
 
 	// 统一下发 UI 刷新信号——子控件绑定此委托以同步状态
@@ -79,6 +86,10 @@ protected:
 private:
 	TSharedPtr<SSchedulerWidget> MySlateWidget;
 	TSharedPtr<SSchedulerRuler> MyRulerSlate;
+
+	// 运行时创建的HeadLeft控件实例——由Customize类动态生成，持有引用防GC回收
+	UPROPERTY()
+	TObjectPtr<UUserWidget> CustomizeInstance;
 
 	void HandleRulerClicked(int64 Tick);
 	void HandleRulerDragged(int64 DeltaTick);

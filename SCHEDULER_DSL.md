@@ -1,6 +1,6 @@
 # SchedulerPluginDev · 架构DSL
 
-> 更新：2026-06-05
+> 更新：2026-06-06
 > 用途：项目长久记忆，记录功能所有者、广播、接口与委托链
 > 维护规则：每次增删委托/接口/函数签名/UI控件后同步更新本文
 
@@ -229,8 +229,6 @@ USchedulerSubsystem
 
 ## UI 层
 
-> 以下 UI 层内容较上次更新无变更，保留原文。
-
 ### SchedulerWidget —— 插件 UI 总容器
 
 **定位：** 纯布局容器，自身无任何交互功能与渲染刷新（无 Tick）。四个 Slot 为后续 UI 子项提供挂载点，所有功能由 Slot 内的子项实现。
@@ -275,6 +273,12 @@ USchedulerSubsystem
 | `RulerMaxTickValue` | int64 | 0 | 刻度轴最大 Tick 值，0=不限制 |
 | `RulerTickLevel` | `TArray<FTickLevel>` | [] | 缩放层级数组 |
 
+**蓝图属性（Slot）：**
+
+| 属性 | 类型 | 默认值 | 说明 |
+|------|------|------|------|
+| `Customize` | `TSubclassOf<UUserWidget>` | nullptr | 左上角自定义控件类——用户选取 UUserWidget 子类，运行时动态创建实例 |
+
 **事件（UMG）：**
 
 | 委托 | 说明 |
@@ -283,12 +287,12 @@ USchedulerSubsystem
 
 **四个 Slot：**
 
-| Slot 名 | 位置 | 填充方式（C++） |
+| Slot 名 | 位置 | 填充方式 |
 |------|------|------|
-| `HeadLeft` | 左上 | `.HeadLeft(SNew(...))` |
-| `HeadRight` | 右上 | `.HeadRight(SNew(...))` |
-| `BodyLeft` | 左下 | `.BodyLeft(SNew(...))` |
-| `BodyRight` | 右下 | `.BodyRight(SNew(...))` |
+| `HeadLeft` | 左上 | 蓝图 `Customize` 属性（UUserWidget 实例），或 C++ `.HeadLeft(...)` |
+| `HeadRight` | 右上 | `.HeadRight(SNew(SSchedulerRuler))` |
+| `BodyLeft` | 左下 | `.BodyLeft(SNew(...))`（预留） |
+| `BodyRight` | 右下 | `.BodyRight(SNew(...))`（预留） |
 
 **生命周期约束：**
 

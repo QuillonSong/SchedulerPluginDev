@@ -25,10 +25,26 @@ TSharedRef<SWidget> USchedulerWidget::RebuildWidget()
 		.OnDragged(FOnSSchedulerRulerDragged::CreateUObject(this, &USchedulerWidget::HandleRulerDragged))
 		.OnScrolled(FOnSSchedulerRulerScrolled::CreateUObject(this, &USchedulerWidget::HandleRulerScrolled));
 
+	// 提取左上角用户自定义控件——根据Customize类动态创建实例，未设置时传空
+	TSharedPtr<SWidget> HeadLeftContent;
+	if (Customize)
+	{
+		// 若类变更或实例不存在则重新创建
+		if (!CustomizeInstance || CustomizeInstance->GetClass() != Customize)
+		{
+			CustomizeInstance = CreateWidget<UUserWidget>(this, Customize);
+		}
+		if (CustomizeInstance)
+		{
+			HeadLeftContent = CustomizeInstance->TakeWidget();
+		}
+	}
+
 	MySlateWidget = SNew(SSchedulerWidget)
 		.HeadHeight(HeadHeight)
 		.LeftSidebarWidth(LeftSidebarWidth)
 		.bIsDrawCross(bIsDrawCross)
+		.HeadLeft(HeadLeftContent)
 		.HeadRight(MyRulerSlate);
 
 	return MySlateWidget.ToSharedRef();
@@ -39,6 +55,10 @@ void USchedulerWidget::ReleaseSlateResources(bool bReleaseChildren)
 	Super::ReleaseSlateResources(bReleaseChildren);
 	MySlateWidget.Reset();
 	MyRulerSlate.Reset();
+	if (bReleaseChildren)
+	{
+		CustomizeInstance = nullptr;
+	}
 }
 
 void USchedulerWidget::SynchronizeProperties()
