@@ -41,6 +41,12 @@ public:
 	void SetMaxTickValue(int64 InValue);
 	void ZoomTickLevel(int32 Delta);
 
+	// ── Keyframe 对齐（Phase 3）──
+	int64 GetViewStartTick() const { return ViewStartTick; }
+	int32 GetActiveLevelIndex() const { return ActiveLevelIndex; }
+	float GetMinorPixel() const { return MinorPixel; }
+	const TArray<FTickLevel>* GetTickLevelArray() const { return &TickLevel; }
+
 	// 输入事件
 	virtual FReply OnMouseButtonDown(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent) override;
 	virtual FReply OnMouseButtonUp(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent) override;

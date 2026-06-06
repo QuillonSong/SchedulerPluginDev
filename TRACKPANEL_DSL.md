@@ -2,7 +2,7 @@
 
 > 更新：2026-06-06
 > 用途：Track 面板模块的架构设计与实现文档
-> 当前阶段：Phase 1+2 已完成（OwnerTrack + TaskTrack + 折叠展开）
+> 当前阶段：Phase 1+2+3 已完成（Owner/TaskTrack + 折叠展开 + Keyframe渲染交互）
 
 ---
 
@@ -210,9 +210,54 @@ TitleScrollBox                    BodyScrollBox
 
 ---
 
-## Phase 3 待实现
+## Phase 3 —— Keyframe 渲染与交互（已完成）
 
-- Keyframe 圆形/菱形 SImage 渲染（水平对齐 Ruler，聚合算法）
-- 左键选中切换颜色（单选）
-- 右键删除（选中态下调用 Task::DeleteKeyframe）
-- RefreshUI 联动 Keyframe 位置刷新
+### 渲染
+- SCanvas + SImage + FSlateBrush(KeyframeTexture) 定位渲染
+- 位置 = `(Tick - ViewStartTick) * EffectiveTickPixel`，与 Ruler 水平对齐
+- Y = `(RowHeight - KeyframeSize) * 0.5` 垂直居中
+
+### 交互
+- 左键点击 → 选中（单选，CheckedColor 高亮）
+- 右键点击选中 Keyframe → 删除 → `OnKeyframeDelete(Tick)` → `Task::RemoveKeyframe(Tick)` → `ITaskInterface::RemoveKeyframe(Index)` → `RefreshAllKeyframes()`
+
+### 蓝图属性（USchedulerWidget）
+| 属性 | 类型 | 默认值 |
+|------|------|--------|
+| `KeyframeSize` | float | 10 |
+| `UnCheckedColor` | FLinearColor | White |
+| `CheckedColor` | FLinearColor | (0.2, 0.5, 1.0) |
+| `KeyframeTexture` | UTexture2D* | nullptr |
+
+### 已知问题
+- `[FIXME]`: Keyframe 属性(Size/Color/Texture)修改后渲染不更新——SyncKeyframeState→SetKeyframeParams→RefreshKeyframes 链路待排查
+- 聚合功能（缩放时重叠 >50% 合并为菱形）未实现
+- Circle/Triangle 原生画刷形未实现（可 KeyframeTexture 自定义贴图替代）
+
+---
+
+## Task 生命周期
+
+```
+CreateTask → NewObject → set Subsystem → OnTaskInitialized()
+  ├─ TaskMap.FindOrAdd(OwnerName).Add(this)
+  ├─ OnTimeChanged.AddDynamic
+  ├─ 新 Owner → CreateOwnerTrackInternal → CreateOwnerTrackWidgets
+  └─ CreateTaskTrackInternal → CreateTaskTrackWidgets
+
+DestroyTask → DestroyTaskTrackWidgets → OwnerTasks.Remove
+  → Task->OnDestroy()
+      ├─ bIsOnDestroy = true
+      ├─ OnTimeChanged.RemoveDynamic
+      ├─ ITaskInterface::Execute_DestroyTask(TaskOwner)
+      └─ MarkAsGarbage()
+  → 分组清空 → DestroyOwnerTrackWidgets → TrackMap.Remove
+```
+
+---
+
+## Phase 4 待实现
+
+- Keyframe 聚合算法
+- Keyframe 属性热更新修复
+- 自定义画刷形（Circle/Triangle）

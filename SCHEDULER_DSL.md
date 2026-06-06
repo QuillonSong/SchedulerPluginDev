@@ -100,7 +100,7 @@ ITaskInterface::Execute_ExecuteTask(TaskOwner, NewCurrentTime, bIsForward, ClipI
 | 函数 | 访问 | 类别 | 功能 |
 |------|------|------|------|
 | `OnTaskInitialized()` | public | — | 初始化钩子，预留 TaskTrack::Create 调用 |
-| `OnDestory()` | public | — | 销毁钩子，预留 UI 销毁逻辑 |
+| `OnDestroy()` | public | — | 销毁钩子，预留 UI 销毁逻辑 |
 | `OnTimeChange(int64, bool)` | public | — | 时刻变更回调：二分查找 → 构造 ClipIndex → ITaskInterface::Execute_ExecuteTask |
 | `AddKeyframe(int64, const TArray<int64>&, int32&, bool&)` | public, BlueprintCallable | Scheduler\|Task | 拷贝 InKeyframes 到成员 Keyframes，二分查找插入/去重，TODO UI 更新 |
 | `DeleteKeyframe(int64, int32&)` | public | — | 按值查找并移除关键帧，返回原始索引，不对蓝图公开 |

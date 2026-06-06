@@ -4,20 +4,51 @@
 #include "SchedulerTask.h"
 #include "TaskInterface.h"
 #include "Scheduler.h"
+#include "SchedulerSubsystem.h"
 
 
 void USchedulerTask::OnTaskInitialized()
 {
-	//TODO))调用TaskTrack中的Create
+	if (!Subsystem) return;
+
+	// 按 OwnerName 入池
+	TArray<USchedulerTask*>& OwnerTasks = Subsystem->TaskMap.FindOrAdd(TaskOwnerName);
+	OwnerTasks.Add(this);
+
+	// 绑定时刻变更回调
+	Subsystem->OnTimeChanged.AddDynamic(this, &USchedulerTask::OnTimeChange);
+
+	const bool bIsNewOwner = !Subsystem->TrackMap.Contains(TaskOwnerName);
+	if (bIsNewOwner)
+	{
+		Subsystem->CreateOwnerTrackInternal(TaskOwnerName);
+	}
+
+	Subsystem->CreateTaskTrackInternal(*this);
 }
 
-void USchedulerTask::OnDestory()
+void USchedulerTask::OnDestroy()
 {
-	//TODO))调用销毁UI
+	bIsOnDestroy = true;
+
+	// 解绑时刻变更委托
+	if (Subsystem)
+	{
+		Subsystem->OnTimeChanged.RemoveDynamic(this, &USchedulerTask::OnTimeChange);
+	}
+
+	// 通知 TaskOwner
+	if (TaskOwner && TaskOwner->Implements<UTaskInterface>())
+	{
+		ITaskInterface::Execute_DestroyTask(TaskOwner);
+	}
+
+	// 标记 GC
+	MarkAsGarbage();
 }
 
 void USchedulerTask::OnTimeChange(int64 InCurrentTime, bool bIsForward)
-{	
+{
 	if (Keyframes.Num() == 0)
 	{
 		return;
@@ -28,7 +59,6 @@ void USchedulerTask::OnTimeChange(int64 InCurrentTime, bool bIsForward)
 		return;
 	}
 
-	// 二分查找：Left = 首个 >= InCurrentTime 的索引
 	int32 Left = 0;
 	int32 Right = Keyframes.Num();
 	while (Left < Right)
@@ -47,7 +77,6 @@ void USchedulerTask::OnTimeChange(int64 InCurrentTime, bool bIsForward)
 	FClipIndex ClipIndex;
 	if (Left < Keyframes.Num() && Keyframes[Left] == InCurrentTime)
 	{
-		// 精确命中：方向决定区间
 		if (bIsForward)
 		{
 			ClipIndex.LastIndex = Left;
@@ -61,7 +90,6 @@ void USchedulerTask::OnTimeChange(int64 InCurrentTime, bool bIsForward)
 	}
 	else
 	{
-		// 落在两帧之间，与方向无关
 		ClipIndex.LastIndex = Left - 1;
 		ClipIndex.NextIndex = Left;
 	}
@@ -73,7 +101,6 @@ void USchedulerTask::AddKeyframe(int64 NewKeyframe, const TArray<int64>& InKeyfr
 {
 	bOutIsInsert = true;
 
-	// 拷贝组件 Keyframes 到 Task 缓存，就地操作
 	Keyframes = InKeyframes;
 
 	int32 Left = 0;
@@ -101,14 +128,20 @@ void USchedulerTask::AddKeyframe(int64 NewKeyframe, const TArray<int64>& InKeyfr
 		Keyframes.Insert(NewKeyframe, Left);
 		OutIndex = Left;
 	}
-	// [INFO]移除TArray<int64>& OutKeyframes，不在函数中更新OutKeyframes，外部数组由外部维护；
-	// TODO))调用UI更新函数
+
+	if (Subsystem) Subsystem->RefreshAllKeyframes();
 }
 
-void USchedulerTask::DeleteKeyframe(int64 InKeyframe, int32& OriginalIndex)
+void USchedulerTask::RemoveKeyframe(int64 InKeyframe, int32& OriginalIndex)
 {
 	int32 Index = Keyframes.Find(InKeyframe);
 	Keyframes.RemoveAt(Index);
 	OriginalIndex = Index;
-}
 
+	if (TaskOwner && TaskOwner->Implements<UTaskInterface>())
+	{
+		ITaskInterface::Execute_RemoveKeyframe(TaskOwner, Index);
+	}
+
+	if (Subsystem) Subsystem->RefreshAllKeyframes();
+}

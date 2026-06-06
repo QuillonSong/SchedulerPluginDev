@@ -49,50 +49,19 @@ USchedulerTask* USchedulerSubsystem::CreateTask(FString TaskName, FString TaskOw
 	NewTask->TaskName = MoveTemp(TaskName);
 	NewTask->TaskOwnerName = MoveTemp(TaskOwnerName);
 	NewTask->TaskOwner = MoveTemp(TaskOwner);
-	NewTask->OnTaskInitialized();
-
-	const bool bIsNewOwner = !TrackMap.Contains(NewTask->TaskOwnerName);
-
-	TArray<USchedulerTask*>& OwnerTasks = TaskMap.FindOrAdd(NewTask->TaskOwnerName);
-	OwnerTasks.Add(NewTask);
-
-	OnTimeChanged.AddDynamic(NewTask, &USchedulerTask::OnTimeChange);
-
-	if (bIsNewOwner)
-	{
-		FTrack NewTrack;
-		if (TitleRowsBox.IsValid() && BodyRowsBox.IsValid())
-		{
-			CreateOwnerTrackWidgets(NewTask->TaskOwnerName, NewTrack);
-		}
-		TrackMap.Add(NewTask->TaskOwnerName, MoveTemp(NewTrack));
-	}
-
-	// 增量：始终创建 TaskTrack（无论 Owner 是否新建）
-	FTrack* OwnerTrack = TrackMap.Find(NewTask->TaskOwnerName);
-	if (OwnerTrack && TitleRowsBox.IsValid() && BodyRowsBox.IsValid())
-	{
-		CreateTaskTrackWidgets(*OwnerTrack, NewTask);
-	}
-
+	NewTask->Subsystem = this;
+	NewTask->OnTaskInitialized();  // 入池 + 绑定委托 + 创建 Track 控件
 	return NewTask;
 }
 
-bool USchedulerSubsystem::DeleteTask(USchedulerTask* Task)
+bool USchedulerSubsystem::DestroyTask(USchedulerTask* Task)
 {
-	if (!IsValid(Task))
-	{
-		return false;
-	}
+	if (!IsValid(Task)) return false;
 
 	FTrack* OwnerTrack = TrackMap.Find(Task->TaskOwnerName);
 	TArray<USchedulerTask*>* OwnerTasks = TaskMap.Find(Task->TaskOwnerName);
-	if (!OwnerTasks)
-	{
-		return false;
-	}
+	if (!OwnerTasks) return false;
 
-	// 遍历找到对应的 TaskTrack Entry 并销毁
 	if (OwnerTrack)
 	{
 		for (int32 i = OwnerTrack->TaskTracks.Num() - 1; i >= 0; --i)
@@ -107,22 +76,35 @@ bool USchedulerSubsystem::DeleteTask(USchedulerTask* Task)
 	}
 
 	OwnerTasks->Remove(Task);
+	Task->OnDestroy();  // 解绑委托 + 接口通知 + MarkAsGarbage
 
-	// 分组清空 → 移除 OwnerTrack
 	if (OwnerTasks->Num() == 0)
 	{
 		TaskMap.Remove(Task->TaskOwnerName);
-		if (OwnerTrack)
-		{
-			if (OwnerTrack->IsValid())
-			{
-				DestroyOwnerTrackWidgets(*OwnerTrack);
-			}
-			TrackMap.Remove(Task->TaskOwnerName);
-		}
+		if (OwnerTrack) { DestroyOwnerTrackWidgets(*OwnerTrack); }
+		TrackMap.Remove(Task->TaskOwnerName);
 	}
 
 	return true;
+}
+
+void USchedulerSubsystem::CreateOwnerTrackInternal(const FString& OwnerName)
+{
+	FTrack NewTrack;
+	if (TitleRowsBox.IsValid() && BodyRowsBox.IsValid())
+	{
+		CreateOwnerTrackWidgets(OwnerName, NewTrack);
+	}
+	TrackMap.Add(OwnerName, MoveTemp(NewTrack));
+}
+
+void USchedulerSubsystem::CreateTaskTrackInternal(USchedulerTask& Task)
+{
+	FTrack* OwnerTrack = TrackMap.Find(Task.TaskOwnerName);
+	if (OwnerTrack && TitleRowsBox.IsValid() && BodyRowsBox.IsValid())
+	{
+		CreateTaskTrackWidgets(*OwnerTrack, &Task);
+	}
 }
 
 // ── Track 容器初始化 ──
@@ -205,7 +187,7 @@ void USchedulerSubsystem::CreateOwnerTrackWidgets(const FString& OwnerName, FTra
 				TArray<USchedulerTask*> ToDelete = *Tasks;  // 拷贝，避免迭代中修改
 				for (USchedulerTask* T : ToDelete)
 				{
-					DeleteTask(T);
+					DestroyTask(T);
 				}
 			}
 			return FReply::Handled();
@@ -275,7 +257,7 @@ void USchedulerSubsystem::CreateTaskTrackWidgets(FTrack& OwnerTrack, USchedulerT
 		.IndentWidth(20.f)
 		.OnDeleteClicked(FOnClicked::CreateLambda([this, Task]()
 		{
-			DeleteTask(Task);
+			DestroyTask(Task);
 			return FReply::Handled();
 		}));
 
@@ -306,6 +288,18 @@ void USchedulerSubsystem::CreateTaskTrackWidgets(FTrack& OwnerTrack, USchedulerT
 	Entry.Body = Body;
 	Entry.Task = Task;
 
+	// 绑定 Keyframe 渲染所需指针
+	Body->BindRulerState(&CachedViewStartTick, &CachedActiveLevelIndex, &CachedTickLevel, &CachedMinorPixel);
+	Body->SetKeyframeParams(CachedKeyframeSize, CachedUnCheckedColor, CachedCheckedColor, CachedKeyframeTexture.Get());
+
+	// 右键删除 Keyframe → Task::RemoveKeyframe
+	Body->OnKeyframeDelete.BindLambda([this, Task](int64 Tick)
+	{
+		int32 Unused;
+		Task->RemoveKeyframe(Tick, Unused);
+		RefreshAllKeyframes();
+	});
+
 	// 若 Owner 当前已折叠，新 TaskTrack 也需隐藏
 	if (OwnerTrack.bIsCollapsed)
 	{
@@ -314,6 +308,35 @@ void USchedulerSubsystem::CreateTaskTrackWidgets(FTrack& OwnerTrack, USchedulerT
 	}
 
 	OwnerTrack.TaskTracks.Add(MoveTemp(Entry));
+}
+
+void USchedulerSubsystem::RefreshAllKeyframes()
+{
+	for (auto& Pair : TrackMap)
+	{
+		for (FTaskTrackEntry& Entry : Pair.Value.TaskTracks)
+		{
+			if (Entry.Body.IsValid())
+			{
+				Entry.Body->RefreshKeyframes();
+			}
+		}
+	}
+}
+
+void USchedulerSubsystem::SyncKeyframeState(int64 InViewStartTick, int32 InActiveLevelIndex,
+	const TArray<FTickLevel>& InTickLevel, float InMinorPixel,
+	float InKeyframeSize, FLinearColor InUnCheckedColor, FLinearColor InCheckedColor,
+	UTexture2D* InTexture)
+{
+	CachedViewStartTick = InViewStartTick;
+	CachedActiveLevelIndex = InActiveLevelIndex;
+	CachedTickLevel = InTickLevel;
+	CachedMinorPixel = InMinorPixel;
+	CachedKeyframeSize = InKeyframeSize;
+	CachedUnCheckedColor = InUnCheckedColor;
+	CachedCheckedColor = InCheckedColor;
+	CachedKeyframeTexture = InTexture;
 }
 
 void USchedulerSubsystem::DestroyTaskTrackWidgets(FTrack& OwnerTrack, const FTaskTrackEntry& Entry)

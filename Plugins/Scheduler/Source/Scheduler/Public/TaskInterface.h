@@ -19,4 +19,11 @@ public:
 	// Task时刻变更回调——TaskOwner实现此接口以接收关键帧区间通知
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Scheduler|Task")
 	void ExecuteTask(int64 NewCurrentTime, bool bIsForward, FClipIndex ClipIndex);
+	
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Scheduler|Task")
+	void DestroyTask();
+	
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Scheduler|Task")
+	void RemoveKeyframe(int32 KeyframeIndex);
+	
 };

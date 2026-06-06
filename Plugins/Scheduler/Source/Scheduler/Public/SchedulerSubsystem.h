@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Subsystems/WorldSubsystem.h"
 #include "SchedulerTask.h"
+#include "SchedulerRulerTypes.h"
 #include "SchedulerSubsystem.generated.h"
 
 // 前向声明
@@ -12,6 +13,7 @@ class SSchedulerTrackTitle;
 class SSchedulerTrackBody;
 class SScrollBox;
 class SVerticalBox;
+class UTexture2D;
 
 // 时刻变更委托，bIsForward=true为前进、false为后退
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnTimeChanged, int64, NewCurrentTime, bool, bIsForward);
@@ -78,7 +80,7 @@ public:
 
 	//删除Task
 	UFUNCTION(BlueprintCallable, Category = "Scheduler|Task")
-	bool DeleteTask(USchedulerTask* Task);
+	bool DestroyTask(USchedulerTask* Task);
 
 	/**
 	 * Widget 初始化时调用——注入 Track 容器引用 + 显示属性
@@ -97,6 +99,19 @@ public:
 		FMargin InTrackTitleMargin,
 		FMargin InTrackBodyMargin,
 		int32 InTrackFontSize);
+
+	/** Phase 3：刷新所有 TaskTrack 的 Keyframe 渲染——无参，读内部存储的 Ruler 指针 */
+	void RefreshAllKeyframes();
+
+	/** 同步 Ruler 状态 + Keyframe 参数到缓存 */
+	// ── 供 USchedulerTask 调用的内部方法 ──
+	void CreateOwnerTrackInternal(const FString& OwnerName);
+	void CreateTaskTrackInternal(USchedulerTask& Task);
+
+	void SyncKeyframeState(int64 InViewStartTick, int32 InActiveLevelIndex,
+		const TArray<FTickLevel>& InTickLevel, float InMinorPixel,
+		float InKeyframeSize, FLinearColor InUnCheckedColor, FLinearColor InCheckedColor,
+		UTexture2D* InTexture);
 
 private:
 	// 当前时刻
@@ -117,6 +132,16 @@ private:
 	FMargin TrackTitleMargin = FMargin(1.f);
 	FMargin TrackBodyMargin = FMargin(1.f, 1.f, 0.f, 1.f);
 	int32 TrackFontSize = 10;
+
+	// ── Ruler 状态缓存（Phase 3 Keyframe 对齐用）──
+	int64 CachedViewStartTick = 0;
+	int32 CachedActiveLevelIndex = 0;
+	TArray<FTickLevel> CachedTickLevel;
+	float CachedMinorPixel = 10.f;
+	float CachedKeyframeSize = 10.f;
+	FLinearColor CachedUnCheckedColor = FLinearColor::White;
+	FLinearColor CachedCheckedColor = FLinearColor(0.2f, 0.5f, 1.f);
+	TObjectPtr<UTexture2D> CachedKeyframeTexture;
 
 	/** 创建 OwnerTrack 的 Title + Body 控件并添入容器 */
 	void CreateOwnerTrackWidgets(const FString& OwnerName, FTrack& OutTrack);

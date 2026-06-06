@@ -2,6 +2,7 @@
 #include "SSchedulerWidget.h"
 #include "SSchedulerRuler.h"
 #include "SchedulerSubsystem.h"
+#include "SchedulerRulerTypes.h"
 #include "Widgets/Layout/SScrollBox.h"
 #include "Widgets/SBoxPanel.h"
 
@@ -138,6 +139,7 @@ void USchedulerWidget::HandleRulerClicked(int64 Tick)
 
 void USchedulerWidget::HandleRulerDragged(int64 DeltaTick)
 {
+	RefreshKeyframePositions();
 	RefreshUI.Broadcast();
 }
 
@@ -147,6 +149,7 @@ void USchedulerWidget::HandleRulerScrolled(int32 ScrollDelta)
 	{
 		MyRulerSlate->ZoomTickLevel(ScrollDelta);
 	}
+	RefreshKeyframePositions();
 	RefreshUI.Broadcast();
 }
 
@@ -166,6 +169,26 @@ void USchedulerWidget::HandleBodyScrolled(float Offset)
 	bIsScrollSyncing = true;
 	if (TitleScrollBox.IsValid()) TitleScrollBox->SetScrollOffset(Offset);
 	bIsScrollSyncing = false;
+}
+
+void USchedulerWidget::RefreshKeyframePositions()
+{
+	if (!MyRulerSlate.IsValid()) return;
+	UWorld* World = GetWorld();
+	if (!World) return;
+	USchedulerSubsystem* Sub = World->GetSubsystem<USchedulerSubsystem>();
+	if (!Sub) return;
+
+	Sub->SyncKeyframeState(
+		MyRulerSlate->GetViewStartTick(),
+		MyRulerSlate->GetActiveLevelIndex(),
+		*MyRulerSlate->GetTickLevelArray(),
+		MyRulerSlate->GetMinorPixel(),
+		KeyframeSize,
+		UnCheckedColor,
+		CheckedColor,
+		KeyframeTexture.Get());
+	Sub->RefreshAllKeyframes();
 }
 
 #undef LOCTEXT_NAMESPACE

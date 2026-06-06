@@ -93,6 +93,24 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scheduler|Track")
 	FMargin TrackBodyMargin = FMargin(1.f, 1.f, 0.f, 1.f);  // Body 右=0，其余=1
 
+	//[FIXME]: Keyframe 属性不生效——SyncKeyframeState 同步链路待排查
+	//[FIXME]: KeyframeSize/UnCheckedColor/CheckedColor 修改后渲染不变
+	//[FIXME]: KeyframeTexture 设置贴图后面片不更新
+
+	// ── Keyframe ──
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scheduler|Keyframe")
+	float KeyframeSize = 10.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scheduler|Keyframe")
+	FLinearColor UnCheckedColor = FLinearColor::White;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scheduler|Keyframe")
+	FLinearColor CheckedColor = FLinearColor(0.2f, 0.5f, 1.f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scheduler|Keyframe")
+	TObjectPtr<UTexture2D> KeyframeTexture;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Scheduler|Track")
 	int32 TrackFontSize = 10;
 
@@ -143,6 +161,9 @@ private:
 	void HandleTitleScrolled(float Offset);
 	/** 垂直滚动同步——Body 侧用户滚动时同步 Title 侧 */
 	void HandleBodyScrolled(float Offset);
+
+	/** Phase 3：刷新所有 Keyframe 位置——Ruler 拖拽/缩放时自动调用 */
+	void RefreshKeyframePositions();
 
 	/** 乒乓防抖门禁 */
 	bool bIsScrollSyncing = false;
