@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Widgets/SCompoundWidget.h"
-#include "SchedulerRulerTypes.h"
+#include "UI/Ruler/SchedulerRulerTypes.h"
 
 // Slate 层委托
 DECLARE_DELEGATE_OneParam(FOnSSchedulerRulerClicked, int64 /*Tick*/)

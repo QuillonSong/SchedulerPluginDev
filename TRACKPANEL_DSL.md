@@ -39,10 +39,10 @@ Scheduler (插件模块)
 
 | 文件 | 说明 |
 |------|------|
-| `Public/SSchedulerTrackTitle.h` + `.cpp` | BodyLeft 区单行标题 Widget（箭头+文字+删除） |
-| `Public/SSchedulerTrackBody.h` + `.cpp` | BodyRight 区单行体 Widget |
-| `Public/SchedulerSubsystem.h` + `.cpp` | FTrack / FTaskTrackEntry + TrackMap + 增量管理 |
-| `Public/USchedulerWidget.h` + `.cpp` | 蓝图属性 + ScrollBox 容器 + 滚动同步 |
+| `Public/UI/Track/SSchedulerTrackTitle.h` + `.cpp` | BodyLeft 区单行标题 Widget（箭头+文字+删除） |
+| `Public/UI/Track/SSchedulerTrackBody.h` + `.cpp` | BodyRight 区单行体 Widget |
+| `Public/Core/SchedulerSubsystem.h` + `.cpp` | FTrack / FTaskTrackEntry + TrackMap + 增量管理 |
+| `Public/UI/USchedulerWidget.h` + `.cpp` | 蓝图属性 + ScrollBox 容器 + 滚动同步 |
 
 ### 依赖资产
 

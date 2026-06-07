@@ -3,7 +3,7 @@
 #include "CoreMinimal.h"
 #include "Widgets/SCompoundWidget.h"
 #include "Widgets/SCanvas.h"
-#include "SchedulerRulerTypes.h"
+#include "UI/Ruler/SchedulerRulerTypes.h"
 
 class UTexture2D;
 class UTexture2D;

@@ -1,4 +1,4 @@
-#include "SSchedulerRuler.h"
+#include "UI/Ruler/SSchedulerRuler.h"
 #include "Rendering/DrawElements.h"
 #include "Styling/CoreStyle.h"
 #include "Framework/Application/SlateApplication.h"

@@ -1,11 +1,10 @@
-// Fill out your copyright notice in the Description page of Project Settings.
 
 #pragma once
 
 #include "CoreMinimal.h"
 #include "Subsystems/WorldSubsystem.h"
-#include "SchedulerTask.h"
-#include "SchedulerRulerTypes.h"
+#include "Task/SchedulerTask.h"
+#include "UI/Ruler/SchedulerRulerTypes.h"
 #include "SchedulerSubsystem.generated.h"
 
 // 前向声明

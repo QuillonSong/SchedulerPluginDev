@@ -1,4 +1,4 @@
-#include "SSchedulerPlayhead.h"
+#include "UI/Playhead/SSchedulerPlayhead.h"
 #include "Rendering/DrawElements.h"
 #include "Styling/CoreStyle.h"
 #include "Fonts/FontMeasure.h"

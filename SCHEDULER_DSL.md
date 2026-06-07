@@ -29,7 +29,7 @@ Scheduler (插件模块)
 
 **定位：** 替代原有的 `FExecuteTask` 多播委托。Task 对 Owner 是唯一的，接口回调语义更精确。蓝图可直接实现。
 
-**文件：** `Public/TaskInterface.h`
+**文件：** `Public/Task/TaskInterface.h`
 
 ```
 UINTERFACE(Blueprintable)
@@ -38,14 +38,21 @@ class UTaskInterface : public UInterface
 class ITaskInterface
 {
     UFUNCTION(BlueprintNativeEvent, BlueprintCallable)
-    void ExecuteTask(int64 NewCurrentTime, bool bIsForward, FClipIndex ClipIndex);
+    void ExecuteTask(double Alpha, bool bIsForward, FClipIndex ClipIndex);
+
+    UFUNCTION(BlueprintNativeEvent, BlueprintCallable)
+    void DestroyTask();
+
+    UFUNCTION(BlueprintNativeEvent, BlueprintCallable)
+    void RemoveKeyframe(int32 KeyframeIndex);
 };
 ```
 
 **调用方式（C++）：**
 
 ```
-ITaskInterface::Execute_ExecuteTask(TaskOwner, NewCurrentTime, bIsForward, ClipIndex);
+ITaskInterface::Execute_ExecuteTask(TaskOwner, Alpha, bIsForward, ClipIndex);
+ITaskInterface::Execute_RemoveKeyframe(TaskOwner, Index);
 ```
 
 `Execute_ExecuteTask` 是 UHT 为 BlueprintNativeEvent 生成的静态分派函数，第一参数为目标对象。
@@ -84,7 +91,7 @@ ITaskInterface::Execute_ExecuteTask(TaskOwner, NewCurrentTime, bIsForward, ClipI
 | 属性 | 值 |
 |------|-----|
 | 父类 | UObject |
-| 文件 | `Public/SchedulerTask.h` |
+| 文件 | `Public/Task/SchedulerTask.h` |
 
 **成员变量：**
 
@@ -101,9 +108,9 @@ ITaskInterface::Execute_ExecuteTask(TaskOwner, NewCurrentTime, bIsForward, ClipI
 |------|------|------|------|
 | `OnTaskInitialized()` | public | — | 初始化钩子，预留 TaskTrack::Create 调用 |
 | `OnDestroy()` | public | — | 销毁钩子，预留 UI 销毁逻辑 |
-| `OnTimeChange(int64, bool)` | public | — | 时刻变更回调：二分查找 → 构造 ClipIndex → ITaskInterface::Execute_ExecuteTask |
-| `AddKeyframe(int64, const TArray<int64>&, int32&, bool&)` | public, BlueprintCallable | Scheduler\|Task | 拷贝 InKeyframes 到成员 Keyframes，二分查找插入/去重，TODO UI 更新 |
-| `DeleteKeyframe(int64, int32&)` | public | — | 按值查找并移除关键帧，返回原始索引，不对蓝图公开 |
+| `OnTimeChange(int64, bool)` | public | — | 时刻变更回调：二分查找 → 构造 ClipIndex → 计算区间进度 Alpha → ITaskInterface::Execute_ExecuteTask |
+| `AddKeyframe(int64, const TArray<int64>&, int32&, bool&)` | public, BlueprintCallable | Scheduler\|Task | 拷贝 InKeyframes 到成员 Keyframes，二分查找插入/去重，触发 RefreshAllKeyframes |
+| `RemoveKeyframe(int64, int32&)` | public | — | 按值查找并移除关键帧，返回原始索引，通知 TaskOwner RemoveKeyframe，触发 RefreshAllKeyframes |
 
 **OnTimeChange 流程：**
 
@@ -111,7 +118,9 @@ ITaskInterface::Execute_ExecuteTask(TaskOwner, NewCurrentTime, bIsForward, ClipI
 空数组检查 → 越界检查（[0] / Last()）
   → 二分查找：Left = 首个 >= InCurrentTime 的索引
   → 构造 ClipIndex（精确命中按方向，区间内统一 [Left-1, Left]）
-  → ITaskInterface::Execute_ExecuteTask(TaskOwner, ...)
+  → 计算 Alpha = (InCurrentTime - Keyframes[LastIndex]) / (Keyframes[NextIndex] - Keyframes[LastIndex])
+    边界（LastIndex == NextIndex）钳位为 0.0，防除零
+  → ITaskInterface::Execute_ExecuteTask(TaskOwner, Alpha, bIsForward, ClipIndex)
 ```
 
 ---
@@ -219,7 +228,7 @@ USchedulerSubsystem
               ├─ 二分查找 Keyframes，构造 FClipIndex
               │
               ▼
-    ITaskInterface::Execute_ExecuteTask(TaskOwner, Time, Dir, ClipIndex)
+    ITaskInterface::Execute_ExecuteTask(TaskOwner, Alpha, Dir, ClipIndex)
               │
               ▼
     TaskOwner (实现 ITaskInterface 的蓝图/C++对象)
@@ -237,8 +246,8 @@ USchedulerSubsystem
 
 | 层 | 类 | 文件 |
 |------|------|------|
-| UMG 包装（蓝图可见） | `USchedulerWidget` | `Public/USchedulerWidget.h` |
-| Slate 实现 | `SSchedulerWidget` | `Public/SSchedulerWidget.h` |
+| UMG 包装（蓝图可见） | `USchedulerWidget` | `Public/UI/USchedulerWidget.h` |
+| Slate 实现 | `SSchedulerWidget` | `Public/UI/SSchedulerWidget.h` |
 
 **十字分割布局：**
 
@@ -314,9 +323,9 @@ USchedulerSubsystem
 
 | 层 | 类 | 文件 |
 |------|------|------|
-| UMG 包装 | `USchedulerRuler` | `Public/USchedulerRuler.h` |
-| Slate 实现 | `SSchedulerRuler` | `Public/SSchedulerRuler.h` |
-| 类型定义 | `FTickLevel` / `FSchedulerRulerStyle` | `Public/SchedulerRulerTypes.h` |
+| UMG 包装 | `USchedulerRuler` | `Public/UI/Ruler/USchedulerRuler.h` |
+| Slate 实现 | `SSchedulerRuler` | `Public/UI/Ruler/SSchedulerRuler.h` |
+| 类型定义 | `FTickLevel` / `FSchedulerRulerStyle` | `Public/UI/Ruler/SchedulerRulerTypes.h` |
 
 **成员变量：**
 
@@ -433,7 +442,9 @@ SSchedulerRuler 输入
 
 | 接口 | 函数 | 说明 |
 |------|------|------|
-| `ITaskInterface` | `ExecuteTask(NewCurrentTime, bIsForward, ClipIndex)` | Task → Owner 时刻变更通知，BlueprintNativeEvent |
+| `ITaskInterface` | `ExecuteTask(Alpha, bIsForward, ClipIndex)` | Task → Owner 时刻变更通知，Alpha 为区间归一化进度 0.0~1.0，BlueprintNativeEvent |
+| `ITaskInterface` | `DestroyTask()` | Task → Owner 销毁通知 |
+| `ITaskInterface` | `RemoveKeyframe(KeyframeIndex)` | Task → Owner 关键帧移除通知，参数为被移除的索引 |
 
 ---
 

@@ -1,8 +1,9 @@
+
 #pragma once
 
 #include "CoreMinimal.h"
 #include "Components/Widget.h"
-#include "SchedulerRulerTypes.h"
+#include "UI/Ruler/SchedulerRulerTypes.h"
 #include "USchedulerRuler.generated.h"
 
 class SSchedulerRuler;

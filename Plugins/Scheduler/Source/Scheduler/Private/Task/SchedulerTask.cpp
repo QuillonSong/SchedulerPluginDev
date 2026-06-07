@@ -1,10 +1,10 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 
-#include "SchedulerTask.h"
-#include "TaskInterface.h"
+#include "Task/SchedulerTask.h"
+#include "Task/TaskInterface.h"
 #include "Scheduler.h"
-#include "SchedulerSubsystem.h"
+#include "Core/SchedulerSubsystem.h"
 
 
 void USchedulerTask::OnTaskInitialized()
@@ -94,7 +94,16 @@ void USchedulerTask::OnTimeChange(int64 InCurrentTime, bool bIsForward)
 		ClipIndex.NextIndex = Left;
 	}
 
-	ITaskInterface::Execute_ExecuteTask(TaskOwner, InCurrentTime, bIsForward, ClipIndex);
+	// 计算区间进度 Alpha：0.0 = 在 LastIndex 关键帧上，1.0 = 在 NextIndex 关键帧上
+	// 边界（LastIndex == NextIndex，如末帧前进/首帧后退）钳位为 0.0 防除零
+	double Alpha = 0.0;
+	if (ClipIndex.LastIndex != ClipIndex.NextIndex)
+	{
+		const int64 Range = Keyframes[ClipIndex.NextIndex] - Keyframes[ClipIndex.LastIndex];
+		Alpha = static_cast<double>(InCurrentTime - Keyframes[ClipIndex.LastIndex]) / static_cast<double>(Range);
+	}
+
+	ITaskInterface::Execute_ExecuteTask(TaskOwner, Alpha, bIsForward, ClipIndex);
 }
 
 void USchedulerTask::AddKeyframe(int64 NewKeyframe, const TArray<int64>& InKeyframes, int32& OutIndex, bool& bOutIsInsert)

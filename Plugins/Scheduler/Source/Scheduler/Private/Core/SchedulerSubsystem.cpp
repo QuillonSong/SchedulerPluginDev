@@ -1,6 +1,6 @@
-#include "SchedulerSubsystem.h"
-#include "SSchedulerTrackTitle.h"
-#include "SSchedulerTrackBody.h"
+#include "Core/SchedulerSubsystem.h"
+#include "UI/Track/SSchedulerTrackTitle.h"
+#include "UI/Track/SSchedulerTrackBody.h"
 #include "Widgets/Layout/SScrollBox.h"
 #include "Widgets/SBoxPanel.h"
 
