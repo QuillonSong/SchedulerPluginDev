@@ -139,21 +139,13 @@ Body 区是 Track 的展示区域。Track 分两种：
 
 ## ITaskInterface
 
-实现这个接口，你的对象就获得了 Task 调度能力。蓝图可直接实现。
+实现这个接口，你的对象就获得了 Task 调度能力。蓝图可直接实现，全部 3 个事件：
 
-```cpp
-UFUNCTION(BlueprintNativeEvent, BlueprintCallable)
-void ExecuteTask(double Alpha, bool bIsForward, FClipIndex ClipIndex);
-// 时刻变更通知——Alpha 为区间归一化进度 0.0~1.0
-
-UFUNCTION(BlueprintNativeEvent, BlueprintCallable)
-void DestroyTask();
-// Task 销毁通知
-
-UFUNCTION(BlueprintNativeEvent, BlueprintCallable)
-void RemoveKeyframe(int32 KeyframeIndex);
-// 关键帧移除通知
-```
+| 事件 | 触发时机 | 参数 |
+|------|----------|------|
+| `ExecuteTask` | Playhead 经过 Keyframe 区间 | `Alpha`（区间进度 0.0~1.0）、`bIsForward`（方向）、`ClipIndex`（首尾帧索引） |
+| `DestroyTask` | Task 被销毁 | 无——你自行决定数据的去留 |
+| `RemoveKeyframe` | Keyframe 被删除 | `KeyframeIndex`——用这个索引更新你的数据数组 |
 
 ## 架构
 
