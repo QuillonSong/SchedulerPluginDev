@@ -1,6 +1,7 @@
 #include "UI/Ruler/USchedulerRuler.h"
 #include "UI/Ruler/SSchedulerRuler.h"
 #include "Core/SchedulerSubsystem.h"
+#include "Engine/World.h"
 
 TSharedRef<SWidget> USchedulerRuler::RebuildWidget()
 {

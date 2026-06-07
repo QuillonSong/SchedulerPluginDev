@@ -1,8 +1,8 @@
 # TrackPanel · 架构DSL
 
 > 更新：2026-06-07
-> 用途：Scheduler 插件架构设计与实现文档
-> 版本：v1.0（Owner/TaskTrack + Keyframe + Playhead 全部完成）
+> 用途：Scheduler 插件 Track/Keyframe/Playhead 架构设计与实现文档
+> 版本：v1.1（Playhead + Keyframe + 打包验证完成）
 
 ---
 
@@ -26,9 +26,11 @@ Scheduler (插件模块)
 ├── USchedulerTask : UObject                [任务数据——关键帧 + 时刻回调]
 ├── USchedulerWidget : UWidget              [UI层——总容器，蓝图唯一暴露口]
 │   └── SSchedulerWidget : SCompoundWidget  [Slate——十字分割布局]
-├── SSchedulerRuler : SCompoundWidget       [UI层——水平刻度尺]
-├── SSchedulerTrackTitle : SCompoundWidget  [Track行——BodyLeft单行标题]
-├── SSchedulerTrackBody : SCompoundWidget   [Track行——BodyRight单行体]
+├── USchedulerRuler : UWidget               [UI层——水平刻度尺UMG包装]
+├── SSchedulerRuler : SCompoundWidget       [UI层——水平刻度尺Slate实现]
+├── SSchedulerPlayhead : SCompoundWidget    [UI层——游标竖线 + 时间标签]
+├── SSchedulerTrackTitle : SCompoundWidget  [Track行——BodyLeft单行标题(箭头+文字+删除)]
+├── SSchedulerTrackBody : SCompoundWidget   [Track行——BodyRight单行体(Keyframe渲染)]
 ├── FTrack (struct)                         [OwnerTrack——Title+Body+子TaskTrack列表]
 └── FTaskTrackEntry (struct)                [TaskTrack行——Title+Body+Task指针]
 ```
@@ -39,10 +41,14 @@ Scheduler (插件模块)
 
 | 文件 | 说明 |
 |------|------|
-| `Public/UI/Track/SSchedulerTrackTitle.h` + `.cpp` | BodyLeft 区单行标题 Widget（箭头+文字+删除） |
-| `Public/UI/Track/SSchedulerTrackBody.h` + `.cpp` | BodyRight 区单行体 Widget |
 | `Public/Core/SchedulerSubsystem.h` + `.cpp` | FTrack / FTaskTrackEntry + TrackMap + 增量管理 |
 | `Public/UI/USchedulerWidget.h` + `.cpp` | 蓝图属性 + ScrollBox 容器 + 滚动同步 |
+| `Public/UI/Track/SSchedulerTrackTitle.h` + `.cpp` | BodyLeft 区单行标题 Widget（箭头+文字+删除） |
+| `Public/UI/Track/SSchedulerTrackBody.h` + `.cpp` | BodyRight 区单行体 Widget（Keyframe 渲染） |
+| `Public/UI/Playhead/SSchedulerPlayhead.h` + `.cpp` | 游标竖线 + 时间标签 |
+| `Public/UI/Ruler/SSchedulerRuler.h` + `.cpp` | 水平刻度尺 Slate 实现 |
+| `Public/UI/Ruler/USchedulerRuler.h` + `.cpp` | 刻度尺 UMG 包装 |
+| `Public/UI/Ruler/SchedulerRulerTypes.h` | FTickLevel + FSchedulerRulerStyle 类型 |
 
 ### 依赖资产
 
@@ -134,14 +140,18 @@ CreateTask(TaskName, OwnerName, Owner)
        若 Owner 已折叠 → SetVisibility(Collapsed)
 ```
 
-### DeleteTask
+### DestroyTask
 
 ```
-DeleteTask(Task)
+DestroyTask(Task)
   ├─ TaskMap[OwnerName].Remove(Task)
   ├─ 匹配 FTaskTrackEntry.Task → DestroyTaskTrackWidgets → RemoveSlot
-  └─ OwnerTasks 为空?
-       └─ DestroyOwnerTrackWidgets → RemoveSlot → TrackMap.Remove
+  ├─ OwnerTasks 为空?
+  │    └─ DestroyOwnerTrackWidgets → RemoveSlot → TrackMap.Remove
+  └─ Task->OnDestroy()
+       ├─ OnTimeChanged.RemoveDynamic
+       ├─ ITaskInterface::Execute_DestroyTask(TaskOwner)
+       └─ MarkAsGarbage()
 ```
 
 ### 折叠/展开
@@ -282,8 +292,17 @@ HitTestInvisible → 不拦截鼠标事件
 
 ---
 
+## 打包
+
+| 属性 | 值 |
+|------|-----|
+| 插件类型 | Runtime |
+| Editor 目标 | ✅ UnrealEditor-Win64-Development |
+| Game 目标 | ✅ UnrealGame-Win64-Development |
+| 已知坑位 | `.generated.h` 必须不带路径前缀；Editor PCH 隐式补全的头文件在 Game 构建中需显式 include |
+
 ## Phase 4 待实现
 
 - Keyframe 聚合算法
-- Keyframe 属性热更新修复
+- Keyframe 属性热更新修复（`[FIXME]` 标记位置）
 - 自定义画刷形（Circle/Triangle）

@@ -1,8 +1,62 @@
 # SchedulerPluginDev · 架构DSL
 
-> 更新：2026-06-06
+> 更新：2026-06-07
 > 用途：项目长久记忆，记录功能所有者、广播、接口与委托链
 > 维护规则：每次增删委托/接口/函数签名/UI控件后同步更新本文
+
+---
+
+## 插件类型
+
+| 属性 | 值 |
+|------|-----|
+| 类型 | **Runtime**（非 Editor-only） |
+| 依赖模块 | Core, CoreUObject, Engine, Slate, SlateCore, UMG, InputCore |
+| 打包 | ✅ UnrealEditor + UnrealGame 双目标通过 |
+
+---
+
+## 源码目录结构
+
+```
+Plugins/Scheduler/Source/Scheduler/
+├── Public/
+│   ├── Scheduler.h                    [模块入口]
+│   ├── Core/
+│   │   └── SchedulerSubsystem.h       [内核]
+│   ├── Task/
+│   │   ├── SchedulerTask.h            [任务数据]
+│   │   └── TaskInterface.h            [接口层]
+│   └── UI/
+│       ├── USchedulerWidget.h         [UMG总容器]
+│       ├── SSchedulerWidget.h         [Slate十字布局]
+│       ├── Playhead/
+│       │   └── SSchedulerPlayhead.h   [游标控件]
+│       ├── Ruler/
+│       │   ├── USchedulerRuler.h      [UMG刻度尺]
+│       │   ├── SSchedulerRuler.h      [Slate刻度尺]
+│       │   └── SchedulerRulerTypes.h  [刻度类型定义]
+│       └── Track/
+│           ├── SSchedulerTrackTitle.h [行标题控件]
+│           └── SSchedulerTrackBody.h  [行体控件]
+└── Private/
+    ├── Scheduler.cpp
+    ├── Core/
+    │   └── SchedulerSubsystem.cpp
+    ├── Task/
+    │   └── SchedulerTask.cpp
+    └── UI/
+        ├── USchedulerWidget.cpp
+        ├── SSchedulerWidget.cpp
+        ├── Playhead/
+        │   └── SSchedulerPlayhead.cpp
+        ├── Ruler/
+        │   ├── USchedulerRuler.cpp
+        │   └── SSchedulerRuler.cpp
+        └── Track/
+            ├── SSchedulerTrackTitle.cpp
+            └── SSchedulerTrackBody.cpp
+```
 
 ---
 
@@ -10,15 +64,17 @@
 
 ```
 Scheduler (插件模块)
-├── USchedulerSubsystem : UWorldSubsystem   [内核——时刻调度中心 + Task工厂/池]
+├── USchedulerSubsystem : UWorldSubsystem   [内核——时刻调度中心 + Task工厂/池 + Track池]
 ├── USchedulerTask : UObject                [任务数据单元——关键帧 + 时刻回调]
 │   └── FClipIndex : USTRUCT               [关键帧区间——LastIndex/NextIndex]
 ├── ITaskInterface / UTaskInterface         [接口层——Task通知Owner的唯一回调]
-├── ASchedulerTaskPool : AActor             [任务池——占位，已废弃，功能收敛至Subsystem]
 ├── USchedulerWidget : UWidget              [UI层——总容器，蓝图唯一暴露口]
 │   └── SSchedulerWidget : SCompoundWidget  [Slate——十字分割布局]
-└── USchedulerRuler : UWidget               [UI层——水平刻度尺，支持滚动/缩放/点击]
-    └── SSchedulerRuler : SCompoundWidget   [Slate——刻度绘制+输入处理]
+├── USchedulerRuler : UWidget               [UI层——水平刻度尺，支持滚动/缩放/点击]
+│   └── SSchedulerRuler : SCompoundWidget   [Slate——刻度绘制+输入处理]
+├── SSchedulerPlayhead : SCompoundWidget    [UI层——游标竖线 + 时间标签]
+├── SSchedulerTrackTitle : SCompoundWidget  [Track行——BodyLeft单行标题(箭头+文字+删除)]
+└── SSchedulerTrackBody : SCompoundWidget   [Track行——BodyRight单行体(Keyframe渲染)]
 ```
 
 ---
@@ -127,9 +183,11 @@ ITaskInterface::Execute_RemoveKeyframe(TaskOwner, Index);
 
 ## 内核层
 
-### USchedulerSubsystem —— 时刻调度中心 + Task 工厂/池
+### USchedulerSubsystem —— 时刻调度中心 + Task 工厂/池 + Track 池
 
-**定位：** 内核变量 `CurrentTime` 完全私有；Task 的创建、管理池、OnTimeChanged 绑定统一收敛于此。
+**定位：** 内核变量 `CurrentTime` 完全私有；Task 的创建、管理池、Track 控件创建、OnTimeChanged 绑定统一收敛于此。
+
+**文件：** `Public/Core/SchedulerSubsystem.h`
 
 ### FOnTimeChanged
 
@@ -170,7 +228,10 @@ CurrentTimeMinusMinus()
 | `CurrentTimePlusPlus()` | public, BlueprintCallable | Scheduler\|TimeChange | 前进1时刻 | 触发 OnTimeChanged |
 | `CurrentTimeMinusMinus()` | public, BlueprintCallable | Scheduler\|TimeChange | 后退1时刻，触底钳位0 | 条件触发 OnTimeChanged |
 | `CreateTask(FString, FString, UObject*)` | public, BlueprintCallable | Scheduler\|Task | 工厂创建 Task 并入池 | 绑定 OnTimeChanged |
-| `DeleteTask(USchedulerTask*)` | public, BlueprintCallable | Scheduler\|Task | 从 TaskMap 移除 Task，清理空分组 | 返回 bool，仅移除引用 |
+| `DestroyTask(USchedulerTask*)` | public, BlueprintCallable | Scheduler\|Task | 从 TaskMap/TrackMap 移除 Task + UI，清理空分组 | 触发 OnDestroy + GC |
+| `InitializeTrackContainers(...)` | public | — | Widget 初始化时注入 ScrollBox/SVerticalBox 引用 + 全部显示属性 | 补齐已有 TrackMap 中缺失控件 |
+| `SyncKeyframeState(...)` | public | — | 同步 Ruler 状态 + Keyframe 渲染参数到缓存 | 供 RefreshAllKeyframes 读取 |
+| `RefreshAllKeyframes()` | public | — | 遍历所有 TaskTrack → Body->RefreshKeyframes() | 重绘全部 Keyframe 面片 |
 
 **CreateTask 流程：**
 
@@ -183,21 +244,24 @@ NewObject<USchedulerTask>(TaskOwner)
   → return NewTask
 ```
 
-**DeleteTask 流程：**
+**DestroyTask 流程：**
 
 ```
 IsValid(Task) 门禁
-  → TaskMap.Find(TaskOwnerName) 查找分组
-  → OwnerTasks->Remove(Task) 移除
-  → 分组为空则 TaskMap.Remove(TaskOwnerName)
-  → return true（GC 自动回收 Task，委托自动解绑）
+  → TrackMap.Find(TaskOwnerName) + TaskMap.Find(TaskOwnerName)
+  → 匹配 FTaskTrackEntry.Task → DestroyTaskTrackWidgets → RemoveSlot
+  → OwnerTasks->Remove(Task)
+  → 分组为空 → DestroyOwnerTrackWidgets → TrackMap.Remove + TaskMap.Remove
+  → Task->OnDestroy() → 解绑 OnTimeChanged + ITaskInterface::Execute_DestroyTask + MarkAsGarbage
+  → return true
 ```
 
-**TaskMap：**
+**TaskMap / TrackMap：**
 
 | 属性 | 类型 | 说明 |
 |------|------|------|
 | `TaskMap` | `TMap<FString, TArray<USchedulerTask*>>` | 按 OwnerName 分组管理所有 Task |
+| `TrackMap` | `TMap<FString, FTrack>` | UI 池，与 TaskMap 键镜像，持有 Title/Body + 子 TaskTrack 列表 |
 
 ---
 
@@ -299,9 +363,11 @@ USchedulerSubsystem
 | Slot 名 | 位置 | 填充方式 |
 |------|------|------|
 | `HeadLeft` | 左上 | 蓝图 `Customize` 属性（UUserWidget 实例），或 C++ `.HeadLeft(...)` |
-| `HeadRight` | 右上 | `.HeadRight(SNew(SSchedulerRuler))` |
-| `BodyLeft` | 左下 | `.BodyLeft(SNew(...))`（预留） |
-| `BodyRight` | 右下 | `.BodyRight(SNew(...))`（预留） |
+| `HeadRight` | 右上 | `.HeadRight(MyRulerSlate)` — SSchedulerRuler |
+| `BodyLeft` | 左下 | `.BodyLeft(TitleScrollBox)` — 垂直滚动列表，容纳 SSchedulerTrackTitle 行 |
+| `BodyRight` | 右下 | `.BodyRight(BodyScrollBox)` — 垂直滚动列表，容纳 SSchedulerTrackBody 行 |
+
+> HeadRight 上方叠加 `SSchedulerPlayhead`（SOverlay 覆盖整个 Widget），竖线贯穿 HeadRight + BodyRight。
 
 **生命周期约束：**
 
@@ -399,6 +465,46 @@ Tick = ViewStartTick + Round(LocalX / EffectiveTickPixel)
 | `HandleSetCurrentTime(Tick)` | Broadcast OnClicked + `CachedSubsystem->SetCurrentTime(Tick)` |
 | `ScrollRuler()` | 绑定至 RefreshUI，Invalidate 刻度尺 |
 | `ZoomTickLevel(Delta)` | `ActiveLevelIndex -= Delta` → Invalidate |
+
+---
+
+### TrackPanel —— Owner/Task 轨道面板
+
+**定位：** BodyLeft + BodyRight 区的行列表，每行含 Title（名称+箭头+删除）和 Body（Keyframe 渲染面片）。由 Subsystem 直接管理增删，Widget 仅负责初始化注入容器。
+
+> 详细控件层级、数据结构(FTrack/FTaskTrackEntry)、增量流、折叠逻辑见 **[TRACKPANEL_DSL.md](TRACKPANEL_DSL.md)**。
+
+**蓝图属性（Track，均位于 USchedulerWidget）：**
+
+| 属性 | 类型 | 默认值 | 说明 |
+|------|------|------|------|
+| `TrackHeight` | float | 24 | 轨道行高 |
+| `OwnerTrackColor` | FLinearColor | (0.08,0.08,0.08) | OwnerTrack 背景色 |
+| `TaskTrackColor` | FLinearColor | (0.12,0.12,0.12) | TaskTrack 背景色 |
+| `TrackTextColor` | FLinearColor | (0.9,0.9,0.9) | 标题文字颜色 |
+| `TrackBorderColor` | FLinearColor | (0.2,0.2,0.2) | 行描边颜色 |
+| `TrackTitleMargin` | FMargin | (1,1,1,1) | Title 边框四边 |
+| `TrackBodyMargin` | FMargin | (1,1,0,1) | Body 边框（右=0） |
+| `TrackFontSize` | int32 | 10 | 标题字号 |
+
+**垂直滚动同步：** TitleScrollBox ↔ BodyScrollBox 双向 SetScrollOffset，`bIsScrollSyncing` 门禁防乒乓。
+
+---
+
+### Playhead —— 游标控件
+
+**定位：** SOverlay 覆盖整个 USchedulerWidget 的独立 Slate 控件，OnPaint 直接绘制竖线 + 时间标签。HitTestInvisible，不拦截鼠标事件。
+
+**文件：** `Public/UI/Playhead/SSchedulerPlayhead.h`
+
+| 属性 | 类型 | 默认值 | 说明 |
+|------|------|------|------|
+| `PlayheadWidth` | float | 2 | 竖线宽度 |
+| `PlayheadColor` | FLinearColor | Red | 竖线颜色 |
+| `PlayheadFontSize` | int32 | 8 | 时间标签字号 |
+| `PlayheadFontColor` | FLinearColor | Red | 时间标签颜色 |
+
+**更新链路：** `OnTimeChanged.AddDynamic → USchedulerWidget::UpdatePlayhead`，X 坐标 = `LeftSidebarWidth + (CurrentTime - ViewStartTick) * EffectiveTickPixel`，超出可见范围时 `SetVisibility(Collapsed)`。
 
 ---
 

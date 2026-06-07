@@ -10,10 +10,12 @@
 
 #define LOCTEXT_NAMESPACE "UMG"
 
+#if WITH_EDITOR
 const FText USchedulerWidget::GetPaletteCategory()
 {
 	return LOCTEXT("Scheduler", "Scheduler");
 }
+#endif
 
 TSharedRef<SWidget> USchedulerWidget::RebuildWidget()
 {

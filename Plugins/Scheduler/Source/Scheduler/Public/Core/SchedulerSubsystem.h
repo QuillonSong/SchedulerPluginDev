@@ -2,6 +2,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Layout/Margin.h"
 #include "Subsystems/WorldSubsystem.h"
 #include "Task/SchedulerTask.h"
 #include "UI/Ruler/SchedulerRulerTypes.h"

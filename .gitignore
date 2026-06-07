@@ -3,6 +3,7 @@ Binaries/
 Intermediate/
 DerivedDataCache/
 Saved/
+Build/
 
 # IDE
 .vs/
@@ -16,3 +17,6 @@ Thumbs.db
 
 # Agent
 .claude/
+
+# Package
+Package/
