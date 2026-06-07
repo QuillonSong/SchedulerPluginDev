@@ -81,6 +81,10 @@ public:
 	//删除Task
 	UFUNCTION(BlueprintCallable, Category = "Scheduler|Task")
 	bool DestroyTask(USchedulerTask* Task);
+	
+	// TODO——DestroyOwner 按 OwnerName 批量销毁该 Owner 下全部 Task + Track，待明天实现
+	UFUNCTION(BlueprintCallable, Category = "Scheduler|Task")
+	bool DestroyOwner(FString OwnerName);
 
 	/**
 	 * Widget 初始化时调用——注入 Track 容器引用 + 显示属性
