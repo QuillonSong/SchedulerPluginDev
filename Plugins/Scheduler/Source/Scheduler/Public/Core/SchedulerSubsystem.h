@@ -82,7 +82,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scheduler|Task")
 	bool DestroyTask(USchedulerTask* Task);
 	
-	// TODO——DestroyOwner 按 OwnerName 批量销毁该 Owner 下全部 Task + Track，待明天实现
+	// TODO))DestroyOwner 按 OwnerName 批量销毁该 Owner 下全部 Task + Track，待明天实现
 	UFUNCTION(BlueprintCallable, Category = "Scheduler|Task")
 	bool DestroyOwner(FString OwnerName);
 

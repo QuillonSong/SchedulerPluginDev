@@ -88,6 +88,11 @@ bool USchedulerSubsystem::DestroyTask(USchedulerTask* Task)
 	return true;
 }
 
+bool USchedulerSubsystem::DestroyOwner(FString OwnerName)
+{
+	return true;
+}
+
 void USchedulerSubsystem::CreateOwnerTrackInternal(const FString& OwnerName)
 {
 	FTrack NewTrack;
