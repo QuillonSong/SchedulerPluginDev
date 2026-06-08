@@ -90,6 +90,36 @@ bool USchedulerSubsystem::DestroyTask(USchedulerTask* Task)
 
 bool USchedulerSubsystem::DestroyOwner(FString OwnerName)
 {
+	// 门禁——TaskMap 中无此 Owner 则无事可做
+	TArray<USchedulerTask*>* OwnerTasks = TaskMap.Find(OwnerName);
+	if (!OwnerTasks || OwnerTasks->Num() == 0)
+	{
+		return false;
+	}
+
+	// TrackMap 可能不存在——UI 未初始化时只创建了 Task 数据，无对应控件
+	FTrack* OwnerTrack = TrackMap.Find(OwnerName);
+
+	// 销毁全部 Task——OnDestroy 含解绑委托 + ITaskInterface 通知 + GC 标记
+	// OnDestroy 有 bIsOnDestroy 防重入门禁，重复调用安全
+	for (USchedulerTask* Task : *OwnerTasks)
+	{
+		if (IsValid(Task))
+		{
+			Task->OnDestroy();
+		}
+	}
+
+	// 销毁 OwnerTrack 控件——内部已遍历销毁所有子 TaskTrack，无需单独处理
+	if (OwnerTrack)
+	{
+		DestroyOwnerTrackWidgets(*OwnerTrack);
+		TrackMap.Remove(OwnerName);
+	}
+
+	// 从 TaskMap 移除——延后至此，确保 OnDestroy 期间数据完整
+	TaskMap.Remove(OwnerName);
+
 	return true;
 }
 

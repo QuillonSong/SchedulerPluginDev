@@ -1,4 +1,4 @@
-# Scheduler Plugin v1.0
+# Scheduler Plugin v1.1.0
 
 **一个 Runtime 调度器——让任意使用者在打包后的游戏中仍能进行时间轴编辑。**
 
@@ -64,6 +64,8 @@ Scheduler **有意不内置保存/加载机制**。Task 的关键帧数据由你
 
 **Scheduler 提供调度能力，你维护数据。** 我们相信这种解耦是最大的尊重。
 
+Save/Load 恢复流程：`CreateTask → SyncKeyframes(LoadedArray)`，即可让新建的 Task 获得之前保存的关键帧数据。
+
 ## USchedulerWidget —— 一切编辑操作的容器
 
 把 `USchedulerWidget` 从 UMG Palette 的 **Scheduler** 分类下拖入你的 Widget 蓝图——整个 Scheduler 的 UI 都在这里了。
@@ -127,7 +129,9 @@ Body 区是 Track 的展示区域。Track 分两种：
 |------|------|
 | `CreateTask(Name, OwnerName, Owner)` | 创建 Task——**把返回值存为变量**，后续 AddKeyframe 靠它 |
 | `DestroyTask(Task)` | 销毁 Task，记得把变量置空 |
+| `DestroyOwner(OwnerName)` | 批量销毁该 Owner 下所有 Task + Track |
 | `AddKeyframe(Tick, ...)` | 向 Task 添加关键帧 |
+| `SyncKeyframes(Array)` | Save/Load 后恢复关键帧数据——外部传入已排序数组，Task 接管渲染 |
 | `SetCurrentTime(Tick)` | 跳转到指定时刻 |
 | `GetCurrentTime()` | 获取当前时刻 |
 | `CurrentTimePlusPlus()` | 前进一个时刻 |
@@ -173,7 +177,9 @@ ITaskInterface（能力）              TrackMap（UI 池）
 |------|------|
 | `CreateTask(Name, OwnerName, Owner)` | NewObject 创建 Task，Owner 获得调度能力 |
 | `DestroyTask(Task)` | 销毁 Task + UI + GC 标记，接口通知 Owner |
+| `DestroyOwner(OwnerName)` | 批量销毁 Owner 下全部 Task + Track——Actor 销毁时一键清理 |
 | `AddKeyframe(Tick, ...)` | 二分插入关键帧，去重 |
+| `SyncKeyframes(Array)` | Load 后恢复关键帧——Task 不持久化数据，外部传入接管渲染 |
 | `RemoveKeyframe(Tick, ...)` | 移除关键帧，接口通知 Owner |
 | OwnerTrack 折叠/展开 | ▼/► 箭头 + 子 Task 显隐切换 |
 | Keyframe 交互 | 左键选中（蓝色高亮）/ 右键删除 |

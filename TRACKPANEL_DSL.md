@@ -1,8 +1,8 @@
 # TrackPanel · 架构DSL
 
-> 更新：2026-06-07
+> 更新：2026-06-09
 > 用途：Scheduler 插件 Track/Keyframe/Playhead 架构设计与实现文档
-> 版本：v1.1（Playhead + Keyframe + 打包验证完成）
+> 版本：v1.1（DestroyOwner + SyncKeyframes + 生命周期防护）
 
 ---
 
@@ -154,6 +154,25 @@ DestroyTask(Task)
        └─ MarkAsGarbage()
 ```
 
+### DestroyOwner（v1.1.0 新增）
+
+```
+DestroyOwner(OwnerName)
+  ├─ TaskMap.Find(OwnerName)——无则 return false
+  ├─ TrackMap.Find(OwnerName)——可能为 nullptr（UI 未初始化）
+  ├─ for Task in *OwnerTasks:
+  │    └─ IsValid(Task) → Task->OnDestroy()
+  │         ├─ bIsOnDestroy 防重入门禁
+  │         ├─ RemoveDynamic + ITaskInterface 通知 + MarkAsGarbage
+  ├─ if OwnerTrack:
+  │    └─ DestroyOwnerTrackWidgets → 遍历子 TaskTrack + RemoveSlot + 索引调整
+  │    └─ TrackMap.Remove(OwnerName)
+  └─ TaskMap.Remove(OwnerName)——延后至 OnDestroy 完成后
+  return true
+```
+
+> 注意：DestroyOwner **不循环调用 DestroyTask**——DestroyTask 在最后一个 Task 移除时会从 TaskMap 删键，循环中后续 Task 的 `TaskMap.Find` 返回空导致静默跳过。DestroyOwner 直接管理数据销毁与 Map 清理，保证批量完整性。
+
 ### 折叠/展开
 
 ```
@@ -257,11 +276,17 @@ CreateTask → NewObject → set Subsystem → OnTaskInitialized()
 
 DestroyTask → DestroyTaskTrackWidgets → OwnerTasks.Remove
   → Task->OnDestroy()
-      ├─ bIsOnDestroy = true
+      ├─ bIsOnDestroy 门禁（防重入）
       ├─ OnTimeChanged.RemoveDynamic
       ├─ ITaskInterface::Execute_DestroyTask(TaskOwner)
       └─ MarkAsGarbage()
   → 分组清空 → DestroyOwnerTrackWidgets → TrackMap.Remove
+
+DestroyOwner (批量) → for 所有 Task → OnDestroy()
+  → DestroyOwnerTrackWidgets → TrackMap.Remove
+  → TaskMap.Remove(OwnerName)
+
+SyncKeyframes (数据恢复) → 排序去重 → RefreshAllKeyframes
 ```
 
 ---
@@ -306,3 +331,15 @@ HitTestInvisible → 不拦截鼠标事件
 - Keyframe 聚合算法
 - Keyframe 属性热更新修复（`[FIXME]` 标记位置）
 - 自定义画刷形（Circle/Triangle）
+
+---
+
+## v1.1.0 变更记录
+
+| 变更 | 说明 |
+|------|------|
+| `DestroyOwner` | 按 OwnerName 批量销毁全部 Task + Track，不循环调 DestroyTask 以避免 TaskMap 键中途失效 |
+| `SyncKeyframes` | Save/Load 后外部数据恢复入口，排序去重 + UI 重绘 |
+| `bIsOnDestroy` 防重入 | OnDestroy 新增门禁，防批量操作重复通知 |
+| `IsValid(TaskOwner)` 防护 | ExecuteTask/DestroyTask/RemoveKeyframe 三处裸指针判空改为 IsValid，防 Component 随 Actor 提前销毁后悬空 |
+| 版本编码 | Version 10100 = MAJOR×10000 + MINOR×100 + PATCH → 1.1.0 |

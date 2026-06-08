@@ -29,6 +29,8 @@ void USchedulerTask::OnTaskInitialized()
 
 void USchedulerTask::OnDestroy()
 {
+	// 防重入——DestroyOwner 等批量操作可能多次触及同一 Task
+	if (bIsOnDestroy) return;
 	bIsOnDestroy = true;
 
 	// 解绑时刻变更委托
@@ -37,8 +39,8 @@ void USchedulerTask::OnDestroy()
 		Subsystem->OnTimeChanged.RemoveDynamic(this, &USchedulerTask::OnTimeChange);
 	}
 
-	// 通知 TaskOwner
-	if (TaskOwner && TaskOwner->Implements<UTaskInterface>())
+	// 通知 TaskOwner——IsValid 防组件随 Actor 销毁后的悬空指针
+	if (IsValid(TaskOwner) && TaskOwner->Implements<UTaskInterface>())
 	{
 		ITaskInterface::Execute_DestroyTask(TaskOwner);
 	}
@@ -103,6 +105,8 @@ void USchedulerTask::OnTimeChange(int64 InCurrentTime, bool bIsForward)
 		Alpha = static_cast<double>(InCurrentTime - Keyframes[ClipIndex.LastIndex]) / static_cast<double>(Range);
 	}
 
+	// TaskOwner 可能已随 Actor/Component 销毁而失效，IsValid 防悬空
+	if (!IsValid(TaskOwner)) return;
 	ITaskInterface::Execute_ExecuteTask(TaskOwner, Alpha, bIsForward, ClipIndex);
 }
 
@@ -147,10 +151,28 @@ void USchedulerTask::RemoveKeyframe(int64 InKeyframe, int32& OriginalIndex)
 	Keyframes.RemoveAt(Index);
 	OriginalIndex = Index;
 
-	if (TaskOwner && TaskOwner->Implements<UTaskInterface>())
+	if (IsValid(TaskOwner) && TaskOwner->Implements<UTaskInterface>())
 	{
 		ITaskInterface::Execute_RemoveKeyframe(TaskOwner, Index);
 	}
 
+	if (Subsystem) Subsystem->RefreshAllKeyframes();
+}
+
+void USchedulerTask::SyncKeyframes(const TArray<int64>& InKeyframes)
+{
+	Keyframes = InKeyframes;
+
+	// 二分查找依赖有序，外部数据可能未排序或含重复
+	Keyframes.Sort();
+	for (int32 i = Keyframes.Num() - 1; i > 0; --i)
+	{
+		if (Keyframes[i] == Keyframes[i - 1])
+		{
+			Keyframes.RemoveAt(i);
+		}
+	}
+
+	// 通知 UI 重绘 Keyframe 面片
 	if (Subsystem) Subsystem->RefreshAllKeyframes();
 }

@@ -72,7 +72,7 @@ public:
 
 	// 后退一时刻
 	UFUNCTION(BlueprintCallable, Category = "Scheduler|TimeChange")
-	void CurrentTimeMinusMinus();
+	void CurrentTimeMinusMinus();       
 
 	//创建Task
 	UFUNCTION(BlueprintCallable, Category = "Scheduler|Task")
@@ -82,7 +82,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Scheduler|Task")
 	bool DestroyTask(USchedulerTask* Task);
 	
-	// TODO))DestroyOwner 按 OwnerName 批量销毁该 Owner 下全部 Task + Track，待明天实现
+	// 按 OwnerName 批量销毁该 Owner 下全部 Task + Track 控件
 	UFUNCTION(BlueprintCallable, Category = "Scheduler|Task")
 	bool DestroyOwner(FString OwnerName);
 

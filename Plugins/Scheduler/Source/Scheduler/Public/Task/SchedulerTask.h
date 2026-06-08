@@ -52,6 +52,10 @@ public:
 	//删除关键帧，不对蓝图公开，由未实现的KeyframeUI调用
 	void RemoveKeyframe(int64 InKeyframe, int32& OriginalIndex);
 	
+	// 同步外部关键帧数据——Save/Load后恢复入口，Task仅接管渲染不持有数据源
+	UFUNCTION(BlueprintCallable, Category = "Scheduler|Task")
+	void SyncKeyframes(const TArray<int64>& InKeyframes);
+	
 	//TODO))销毁UI
 	
 private:

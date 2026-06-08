@@ -1,6 +1,6 @@
 # SchedulerPluginDev · 架构DSL
 
-> 更新：2026-06-07
+> 更新：2026-06-09
 > 用途：项目长久记忆，记录功能所有者、广播、接口与委托链
 > 维护规则：每次增删委托/接口/函数签名/UI控件后同步更新本文
 
@@ -11,6 +11,7 @@
 | 属性 | 值 |
 |------|-----|
 | 类型 | **Runtime**（非 Editor-only） |
+| 版本 | 1.1.0（Version 编码 10100 = MAJOR×10000 + MINOR×100 + PATCH） |
 | 依赖模块 | Core, CoreUObject, Engine, Slate, SlateCore, UMG, InputCore |
 | 打包 | ✅ UnrealEditor + UnrealGame 双目标通过 |
 
@@ -167,6 +168,7 @@ ITaskInterface::Execute_RemoveKeyframe(TaskOwner, Index);
 | `OnTimeChange(int64, bool)` | public | — | 时刻变更回调：二分查找 → 构造 ClipIndex → 计算区间进度 Alpha → ITaskInterface::Execute_ExecuteTask |
 | `AddKeyframe(int64, const TArray<int64>&, int32&, bool&)` | public, BlueprintCallable | Scheduler\|Task | 拷贝 InKeyframes 到成员 Keyframes，二分查找插入/去重，触发 RefreshAllKeyframes |
 | `RemoveKeyframe(int64, int32&)` | public | — | 按值查找并移除关键帧，返回原始索引，通知 TaskOwner RemoveKeyframe，触发 RefreshAllKeyframes |
+| `SyncKeyframes(const TArray<int64>&)` | public, BlueprintCallable | Scheduler\|Task | Save/Load 后数据恢复入口——替换 Keyframes、排序去重、触发 UI 重绘 |
 
 **OnTimeChange 流程：**
 
@@ -176,7 +178,17 @@ ITaskInterface::Execute_RemoveKeyframe(TaskOwner, Index);
   → 构造 ClipIndex（精确命中按方向，区间内统一 [Left-1, Left]）
   → 计算 Alpha = (InCurrentTime - Keyframes[LastIndex]) / (Keyframes[NextIndex] - Keyframes[LastIndex])
     边界（LastIndex == NextIndex）钳位为 0.0，防除零
+  → if !IsValid(TaskOwner) return  —— TaskOwner 可能已随 Actor/Component 销毁失效
   → ITaskInterface::Execute_ExecuteTask(TaskOwner, Alpha, bIsForward, ClipIndex)
+```
+
+**SyncKeyframes 流程（Save/Load 后数据恢复入口）：**
+
+```
+Keyframes = InKeyframes       —— 用户外部维护的数据接管进来
+  → Sort()                    —— 二分查找前置条件
+  → 倒序去重                   —— 重复值破坏 ClipIndex 语义
+  → Subsystem->RefreshAllKeyframes() —— UI 面片重绘
 ```
 
 ---
@@ -229,6 +241,7 @@ CurrentTimeMinusMinus()
 | `CurrentTimeMinusMinus()` | public, BlueprintCallable | Scheduler\|TimeChange | 后退1时刻，触底钳位0 | 条件触发 OnTimeChanged |
 | `CreateTask(FString, FString, UObject*)` | public, BlueprintCallable | Scheduler\|Task | 工厂创建 Task 并入池 | 绑定 OnTimeChanged |
 | `DestroyTask(USchedulerTask*)` | public, BlueprintCallable | Scheduler\|Task | 从 TaskMap/TrackMap 移除 Task + UI，清理空分组 | 触发 OnDestroy + GC |
+| `DestroyOwner(FString)` | public, BlueprintCallable | Scheduler\|Task | 批量销毁 Owner 下全部 Task + Track | 触发全部子 Task 的 OnDestroy + 清理分组 |
 | `InitializeTrackContainers(...)` | public | — | Widget 初始化时注入 ScrollBox/SVerticalBox 引用 + 全部显示属性 | 补齐已有 TrackMap 中缺失控件 |
 | `SyncKeyframeState(...)` | public | — | 同步 Ruler 状态 + Keyframe 渲染参数到缓存 | 供 RefreshAllKeyframes 读取 |
 | `RefreshAllKeyframes()` | public | — | 遍历所有 TaskTrack → Body->RefreshKeyframes() | 重绘全部 Keyframe 面片 |
@@ -253,6 +266,19 @@ IsValid(Task) 门禁
   → OwnerTasks->Remove(Task)
   → 分组为空 → DestroyOwnerTrackWidgets → TrackMap.Remove + TaskMap.Remove
   → Task->OnDestroy() → 解绑 OnTimeChanged + ITaskInterface::Execute_DestroyTask + MarkAsGarbage
+  → return true
+```
+
+**DestroyOwner 流程（批量销毁，不循环调 DestroyTask 以避免 TaskMap 键中途失效）：**
+
+```
+TaskMap.Find(OwnerName) 门禁——无则 return false
+  → TrackMap.Find(OwnerName)——可能为 nullptr（UI 未初始化）
+  → for Task in *OwnerTasks:
+       IsValid(Task) → Task->OnDestroy()（bIsOnDestroy 防重入）
+  → if OwnerTrack: DestroyOwnerTrackWidgets（内部遍历子 TaskTrack + RemoveSlot）
+  → TrackMap.Remove(OwnerName)
+  → TaskMap.Remove(OwnerName)——延后移除，确保 OnDestroy 期间数据完整
   → return true
 ```
 
@@ -552,6 +578,8 @@ SSchedulerRuler 输入
 | `ITaskInterface` | `DestroyTask()` | Task → Owner 销毁通知 |
 | `ITaskInterface` | `RemoveKeyframe(KeyframeIndex)` | Task → Owner 关键帧移除通知，参数为被移除的索引 |
 
+> 所有接口调用均经 `IsValid(TaskOwner)` 防护——TaskOwner（如 Component）可能随其 Outer（Actor）提前销毁，裸指针判空不足以检测 UE 对象生命周期。
+
 ---
 
 ## 运行约束
@@ -567,3 +595,5 @@ SSchedulerRuler 输入
 | 子项自治 | SchedulerWidget 四个 Slot 中控件独立运作 |
 | TaskOwner 必填 | `CreateTask` 蓝图节点必须连线有效 TaskOwner，否则编译不过 |
 | Task 唯一性 | 按 OwnerName 管理，同一 OwnerName 下可有多个 Task |
+| IsValid 防护 | 所有 ITaskInterface 调用均经 `IsValid(TaskOwner)` 防护——Component 可能随其 Outer Actor 先销毁 |
+| DestroyOwner 不循环 DestroyTask | DestroyTask 在末 Task 移除时删 TaskMap 键，循环调会导致后续 Task 静默跳过 |
