@@ -11,7 +11,7 @@
 | 属性 | 值 |
 |------|-----|
 | 类型 | **Runtime**（非 Editor-only） |
-| 版本 | 1.1.0（Version 编码 10100 = MAJOR×10000 + MINOR×100 + PATCH） |
+| 版本 | 1.1.1（Version 编码 10101 = MAJOR×10000 + MINOR×100 + PATCH） |
 | 依赖模块 | Core, CoreUObject, Engine, Slate, SlateCore, UMG, InputCore |
 | 打包 | ✅ UnrealEditor + UnrealGame 双目标通过 |
 

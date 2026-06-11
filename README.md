@@ -1,4 +1,4 @@
-# Scheduler Plugin v1.1.0
+# Scheduler Plugin v1.1.1
 
 **一个 Runtime 调度器——让任意使用者在打包后的游戏中仍能进行时间轴编辑。**
 

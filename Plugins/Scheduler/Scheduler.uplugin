@@ -1,7 +1,7 @@
 {
 	"FileVersion": 3,
-	"Version": 10100,
-	"VersionName": "1.1.0",
+	"Version": 10101,
+	"VersionName": "1.1.1",
 	"FriendlyName": "Scheduler",
 	"Description": "",
 	"Category": "Runtime",
