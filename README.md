@@ -132,10 +132,10 @@ Body 区是 Track 的展示区域。Track 分两种：
 | `DestroyOwner(OwnerName)` | 批量销毁该 Owner 下所有 Task + Track |
 | `AddKeyframe(Tick, ...)` | 向 Task 添加关键帧 |
 | `SyncKeyframes(Array)` | Save/Load 后恢复关键帧数据——外部传入已排序数组，Task 接管渲染 |
-| `SetCurrentTime(Tick)` | 跳转到指定时刻 |
+| `SetCurrentTime(Tick)` | 跳转到指定时刻（归零时方向强制为正向） |
 | `GetCurrentTime()` | 获取当前时刻 |
 | `CurrentTimePlusPlus()` | 前进一个时刻 |
-| `CurrentTimeMinusMinus()` | 后退一个时刻（触底 0 自动停止） |
+| `CurrentTimeMinusMinus()` | 后退一个时刻；归零时正向广播一次，已在 0 则静默 |
 
 ### UI 自定义
 
@@ -147,7 +147,7 @@ Body 区是 Track 的展示区域。Track 分两种：
 
 | 事件 | 触发时机 | 参数 |
 |------|----------|------|
-| `ExecuteTask` | Playhead 经过 Keyframe 区间 | `Alpha`（区间进度 0.0~1.0）、`bIsForward`（方向）、`ClipIndex`（首尾帧索引） |
+| `ExecuteTask` | Playhead 经过 Keyframe 区间 | `Alpha`（区间进度 0.0~1.0）、`bIsForward`（方向）、`ClipIndex`（首尾帧索引）。超出边界时钳位至首/末帧广播一次 |
 | `DestroyTask` | Task 被销毁 | 无——你自行决定数据的去留 |
 | `RemoveKeyframe` | Keyframe 被删除 | `KeyframeIndex`——用这个索引更新你的数据数组 |
 

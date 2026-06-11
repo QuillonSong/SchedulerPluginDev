@@ -63,4 +63,7 @@ private:
 	bool bIsInitialized = false;
 	// 无效Task，待销毁
 	bool bIsOnDestroy = false;
+	// 边界回调去重——连续超出同侧边界仅触发一次，回到区间内后重置
+	bool bLeftBoundaryReported = false;
+	bool bRightBoundaryReported = false;
 };

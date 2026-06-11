@@ -1,6 +1,6 @@
 # SchedulerPluginDev · 架构DSL
 
-> 更新：2026-06-09
+> 更新：2026-06-11
 > 用途：项目长久记忆，记录功能所有者、广播、接口与委托链
 > 维护规则：每次增删委托/接口/函数签名/UI控件后同步更新本文
 
@@ -158,6 +158,8 @@ ITaskInterface::Execute_RemoveKeyframe(TaskOwner, Index);
 | `TaskName` | `FString` | 任务名称 |
 | `TaskOwnerName` | `FString` | 拥有者名称（TaskMap 的分组键） |
 | `TaskOwner` | `UObject*` | 拥有者指针（即 Outer，实现 ITaskInterface） |
+| `bLeftBoundaryReported` | `bool` | 左边界已报告标记，连续超出同侧仅触发一次 |
+| `bRightBoundaryReported` | `bool` | 右边界已报告标记，进入一侧时清除对侧 |
 
 **函数：**
 
@@ -173,14 +175,29 @@ ITaskInterface::Execute_RemoveKeyframe(TaskOwner, Index);
 **OnTimeChange 流程：**
 
 ```
-空数组检查 → 越界检查（[0] / Last()）
-  → 二分查找：Left = 首个 >= InCurrentTime 的索引
-  → 构造 ClipIndex（精确命中按方向，区间内统一 [Left-1, Left]）
-  → 计算 Alpha = (InCurrentTime - Keyframes[LastIndex]) / (Keyframes[NextIndex] - Keyframes[LastIndex])
-    边界（LastIndex == NextIndex）钳位为 0.0，防除零
-  → if !IsValid(TaskOwner) return  —— TaskOwner 可能已随 Actor/Component 销毁失效
-  → ITaskInterface::Execute_ExecuteTask(TaskOwner, Alpha, bIsForward, ClipIndex)
+空数组检查
+  ├─ 超出左边界（InCurrentTime < Keyframes[0]）
+  │   ├─ bLeftBoundaryReported == true → 静默 return（防连续重复广播）
+  │   ├─ 置 bLeftBoundaryReported = true, bRightBoundaryReported = false
+  │   ├─ 构造 ClipIndex {0, 0}，Alpha = 0.0
+  │   └─ if !IsValid(TaskOwner) return → ITaskInterface::Execute_ExecuteTask
+  │
+  ├─ 超出右边界（InCurrentTime > Keyframes.Last()）
+  │   ├─ bRightBoundaryReported == true → 静默 return
+  │   ├─ 置 bRightBoundaryReported = true, bLeftBoundaryReported = false
+  │   ├─ 构造 ClipIndex {LastIdx, LastIdx}，Alpha = 1.0
+  │   └─ if !IsValid(TaskOwner) return → ITaskInterface::Execute_ExecuteTask
+  │
+  └─ 区间内
+      ├─ 重置 bLeftBoundaryReported = bRightBoundaryReported = false
+      ├─ 二分查找：Left = 首个 >= InCurrentTime 的索引
+      ├─ 构造 ClipIndex（精确命中按方向，区间内统一 [Left-1, Left]）
+      ├─ 计算 Alpha = (InCurrentTime - Keyframes[LastIndex]) / (Keyframes[NextIndex] - Keyframes[LastIndex])
+      │   边界（LastIndex == NextIndex）钳位为 0.0，防除零
+      └─ if !IsValid(TaskOwner) return → ITaskInterface::Execute_ExecuteTask
 ```
+
+**边界去重规则：** 进入一侧边界时清除对侧标记——交替穿越（左→右→左）可连续触发。连续停留在同侧则仅广播首次。回到区间内后两标记均重置。
 
 **SyncKeyframes 流程（Save/Load 后数据恢复入口）：**
 
@@ -220,14 +237,17 @@ initializationSubsystem()
 SetCurrentTime(NewCurrentTime)
     ├─ 门禁：NewCurrentTime == CurrentTime → return
     ├─ 门禁：NewCurrentTime < 0 → return
+    ├─ bIsForward = (NewCurrentTime == 0) || (NewCurrentTime > CurrentTime) — 归零强制为正向
     └→ OnTimeChanged.Broadcast(CurrentTime, bIsForward)
 
 CurrentTimePlusPlus()
     └→ OnTimeChanged.Broadcast(CurrentTime, true)
 
 CurrentTimeMinusMinus()
-    ├─ 触底：CurrentTime < 0 → CurrentTime=0, return
-    └→ OnTimeChanged.Broadcast(CurrentTime, false)
+    ├─ 触底：CurrentTime <= 0 → 静默 return
+    ├─ --CurrentTime
+    ├─ bIsForward = (CurrentTime == 0) — 归零正向，与 SetCurrentTime(0) 对齐
+    └→ OnTimeChanged.Broadcast(CurrentTime, bIsForward)
 ```
 
 **函数清单：**
@@ -236,9 +256,9 @@ CurrentTimeMinusMinus()
 |------|------|------|------|------|
 | `initializationSubsystem()` | public, BlueprintCallable | Scheduler | 重置 CurrentTime=0，广播 | 触发 OnTimeChanged |
 | `GetCurrentTime() const` | public, BlueprintPure | Scheduler\|TimeChange | 返回当前时刻 | 无 |
-| `SetCurrentTime(int64)` | public, BlueprintCallable | Scheduler\|TimeChange | 跳转到指定时刻 | 触发 OnTimeChanged（有门禁） |
+| `SetCurrentTime(int64)` | public, BlueprintCallable | Scheduler\|TimeChange | 跳转到指定时刻；归零时强制 bIsForward=true | 触发 OnTimeChanged（有门禁） |
 | `CurrentTimePlusPlus()` | public, BlueprintCallable | Scheduler\|TimeChange | 前进1时刻 | 触发 OnTimeChanged |
-| `CurrentTimeMinusMinus()` | public, BlueprintCallable | Scheduler\|TimeChange | 后退1时刻，触底钳位0 | 条件触发 OnTimeChanged |
+| `CurrentTimeMinusMinus()` | public, BlueprintCallable | Scheduler\|TimeChange | 后退1时刻；触底(0)静默，归零时正向广播 | 条件触发 OnTimeChanged |
 | `CreateTask(FString, FString, UObject*)` | public, BlueprintCallable | Scheduler\|Task | 工厂创建 Task 并入池 | 绑定 OnTimeChanged |
 | `DestroyTask(USchedulerTask*)` | public, BlueprintCallable | Scheduler\|Task | 从 TaskMap/TrackMap 移除 Task + UI，清理空分组 | 触发 OnDestroy + GC |
 | `DestroyOwner(FString)` | public, BlueprintCallable | Scheduler\|Task | 批量销毁 Owner 下全部 Task + Track | 触发全部子 Task 的 OnDestroy + 清理分组 |
@@ -588,7 +608,7 @@ SSchedulerRuler 输入
 |------|------|
 | CurrentTime >= 0 | `SetCurrentTime` 负值被拦截，`CurrentTimeMinusMinus` 触底钳位为0 |
 | 相同值不广播 | `SetCurrentTime` 检测 NewCurrentTime == CurrentTime 时 early return |
-| 触底静默 | `CurrentTimeMinusMinus` 钳位0时不触发广播 |
+| 触底静默 | `CurrentTimeMinusMinus` 已在0时静默 return，不递减不广播 |
 | 初始化广播 | `initializationSubsystem` 始终广播 (0, true) |
 | 线程 | 所有操作在 GameThread，委托为 DynamicMulticast 不跨线程 |
 | UI 无 Tick | SchedulerWidget 仅十字分割布局，不参与渲染刷新循环 |
@@ -596,4 +616,6 @@ SSchedulerRuler 输入
 | TaskOwner 必填 | `CreateTask` 蓝图节点必须连线有效 TaskOwner，否则编译不过 |
 | Task 唯一性 | 按 OwnerName 管理，同一 OwnerName 下可有多个 Task |
 | IsValid 防护 | 所有 ITaskInterface 调用均经 `IsValid(TaskOwner)` 防护——Component 可能随其 Outer Actor 先销毁 |
+| 越界回调去重 | OnTimeChange 超出 Keyframes 边界时钳位广播——连续超出同侧仅触发一次，交替穿越可连续触发 |
+| 归零正向 | SetCurrentTime(0) 和 CurrentTimeMinusMinus 归零时 bIsForward 强制为 true |
 | DestroyOwner 不循环 DestroyTask | DestroyTask 在末 Task 移除时删 TaskMap 键，循环调会导致后续 Task 静默跳过 |

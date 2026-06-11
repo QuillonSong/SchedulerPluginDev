@@ -56,10 +56,38 @@ void USchedulerTask::OnTimeChange(int64 InCurrentTime, bool bIsForward)
 		return;
 	}
 
-	if (InCurrentTime < Keyframes[0] || InCurrentTime > Keyframes.Last())
+	// 超出左边界——钳位至首帧。已在左边界则静默，防连续重复广播
+	if (InCurrentTime < Keyframes[0])
 	{
+		if (bLeftBoundaryReported) return;
+		bLeftBoundaryReported = true;
+		bRightBoundaryReported = false;
+		if (!IsValid(TaskOwner)) return;
+		FClipIndex ClipIndex;
+		ClipIndex.LastIndex = 0;
+		ClipIndex.NextIndex = 0;
+		ITaskInterface::Execute_ExecuteTask(TaskOwner, 0, bIsForward, ClipIndex);
 		return;
 	}
+
+	// 超出右边界——钳位至末帧。已在右边界则静默
+	if (InCurrentTime > Keyframes.Last())
+	{
+		if (bRightBoundaryReported) return;
+		bRightBoundaryReported = true;
+		bLeftBoundaryReported = false;
+		if (!IsValid(TaskOwner)) return;
+		FClipIndex ClipIndex;
+		const int32 LastIdx = Keyframes.Num() - 1;
+		ClipIndex.LastIndex = LastIdx;
+		ClipIndex.NextIndex = LastIdx;
+		ITaskInterface::Execute_ExecuteTask(TaskOwner, 1.0, bIsForward, ClipIndex);
+		return;
+	}
+
+	// 回到区间内——重置边界标记，允许下次越界时再次触发
+	bLeftBoundaryReported = false;
+	bRightBoundaryReported = false;
 
 	int32 Left = 0;
 	int32 Right = Keyframes.Num();

@@ -21,7 +21,8 @@ void USchedulerSubsystem::SetCurrentTime(int64 NewCurrentTime)
 	{
 		return;
 	}
-	const bool bIsForward = NewCurrentTime > CurrentTime;
+	// CurrentTime 归零视为正向——时间轴复位至起点，语义等同于前进
+	const bool bIsForward = (NewCurrentTime == 0) || (NewCurrentTime > CurrentTime);
 	CurrentTime = NewCurrentTime;
 	OnTimeChanged.Broadcast(CurrentTime, bIsForward);
 }
@@ -34,13 +35,15 @@ void USchedulerSubsystem::CurrentTimePlusPlus()
 
 void USchedulerSubsystem::CurrentTimeMinusMinus()
 {
-	--CurrentTime;
-	if (CurrentTime < 0)
+	// 已在时间轴起点——静默，不再递减
+	if (CurrentTime <= 0)
 	{
-		CurrentTime = 0;
 		return;
 	}
-	OnTimeChanged.Broadcast(CurrentTime, false);
+	--CurrentTime;
+	// 归零时方向为正向，语义与 SetCurrentTime(0) 对齐
+	const bool bIsForward = (CurrentTime == 0);
+	OnTimeChanged.Broadcast(CurrentTime, bIsForward);
 }
 
 USchedulerTask* USchedulerSubsystem::CreateTask(FString TaskName, FString TaskOwnerName, UObject* TaskOwner)
